@@ -1,95 +1,34 @@
-/** Enhanced exit codes for better CI/CD integration. */
+/** Process exit codes for CI integration. */
 
-import {
-  NodriftError,
-  ConfigurationError,
-  ConnectionError,
-  ValidationError,
-  StateReadError,
-  ContractError,
-} from './exceptions';
+import { ConfigurationError, ConnectionError, ValidationError } from './errors';
+import type { VerificationResult } from '../verify';
 
-/**
- * Exit codes used by Nodrift for CI/CD integration.
- */
 export enum ExitCode {
-  /** Success, no drift detected */
+  /** Every check passed (or drift was found without --fail-on-drift). */
   SUCCESS = 0,
-  /** Drift detected (if --fail-on-drift is set) */
-  DRIFT_DETECTED = 1,
-  /** Configuration error (invalid YAML, missing fields, etc.) */
+  /** Drift detected and --fail-on-drift was set. */
+  DRIFT = 1,
+  /** The config file could not be read or resolved. */
   CONFIGURATION_ERROR = 2,
-  /** RPC connection error (network issues, timeout) */
+  /** An RPC endpoint was unreachable or on the wrong chain. */
   CONNECTION_ERROR = 3,
-  /** Contract read error (contract not found, ABI mismatch, state read failure) */
-  CONTRACT_ERROR = 4,
-  /** Validation error (schema validation failed) */
+  /** One or more checks could not be evaluated. Never treated as success. */
+  CHECK_ERROR = 4,
+  /** The config failed schema validation. */
   VALIDATION_ERROR = 5,
-  /** File system error (cannot read config, cannot write output) */
-  FILE_SYSTEM_ERROR = 6,
+  /** Unexpected internal error. */
+  INTERNAL_ERROR = 6,
 }
 
-/**
- * Determine the appropriate exit code based on error type and drift status.
- * 
- * @param error - The error that occurred (if any)
- * @param hasDrift - Whether drift was detected
- * @param failOnDrift - Whether to fail on drift (from --fail-on-drift flag)
- * @returns The exit code to use
- */
-export function getExitCode(
-  error: unknown,
-  hasDrift: boolean,
-  failOnDrift: boolean
-): ExitCode {
-  if (error) {
-    if (error instanceof ConfigurationError) {
-      return ExitCode.CONFIGURATION_ERROR;
-    }
-    if (error instanceof ValidationError) {
-      return ExitCode.VALIDATION_ERROR;
-    }
-    if (error instanceof ConnectionError) {
-      return ExitCode.CONNECTION_ERROR;
-    }
-    if (error instanceof StateReadError || error instanceof ContractError) {
-      return ExitCode.CONTRACT_ERROR;
-    }
-    // Check for file system errors
-    if (typeof error === 'object' && error !== null && 'code' in error) {
-      const code = (error as { code: string }).code;
-      if (code === 'ENOENT' || code === 'EACCES' || code === 'EISDIR') {
-        return ExitCode.FILE_SYSTEM_ERROR;
-      }
-    }
-    // Generic Nodrift error
-    if (error instanceof NodriftError) {
-      return ExitCode.DRIFT_DETECTED; // Use drift code for generic errors
-    }
-    return ExitCode.DRIFT_DETECTED; // Unknown error
-  }
-  
-  // No error - check for drift
-  if (hasDrift && failOnDrift) {
-    return ExitCode.DRIFT_DETECTED;
-  }
-  
+export function exitCodeForError(error: unknown): ExitCode {
+  if (error instanceof ValidationError) return ExitCode.VALIDATION_ERROR;
+  if (error instanceof ConfigurationError) return ExitCode.CONFIGURATION_ERROR;
+  if (error instanceof ConnectionError) return ExitCode.CONNECTION_ERROR;
+  return ExitCode.INTERNAL_ERROR;
+}
+
+export function exitCodeForResult(result: VerificationResult, failOnDrift: boolean): ExitCode {
+  if (result.summary.errors > 0) return ExitCode.CHECK_ERROR;
+  if (result.summary.drifted > 0 && failOnDrift) return ExitCode.DRIFT;
   return ExitCode.SUCCESS;
 }
-
-/**
- * Get a human-readable description of an exit code.
- */
-export function getExitCodeDescription(code: ExitCode): string {
-  const descriptions: Record<ExitCode, string> = {
-    [ExitCode.SUCCESS]: 'Success, no drift detected',
-    [ExitCode.DRIFT_DETECTED]: 'Drift detected',
-    [ExitCode.CONFIGURATION_ERROR]: 'Configuration error',
-    [ExitCode.CONNECTION_ERROR]: 'RPC connection error',
-    [ExitCode.CONTRACT_ERROR]: 'Contract read error',
-    [ExitCode.VALIDATION_ERROR]: 'Validation error',
-    [ExitCode.FILE_SYSTEM_ERROR]: 'File system error',
-  };
-  return descriptions[code] || 'Unknown error';
-}
-

@@ -1,304 +1,170 @@
 #!/usr/bin/env node
+/** Command-line interface. */
 
-/** Enhanced CLI with plugin support and new architecture. */
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { style } from './common/style';
+import { Command, InvalidArgumentError, Option } from 'commander';
+import { errorMessage, NodriftError } from './common/errors';
+import { ExitCode, exitCodeForError, exitCodeForResult } from './common/exit-codes';
+import { logger, setLogLevel } from './common/logger';
+import { runInit } from './cli/init';
+import { loadConfig } from './config/load';
+import type { BlockSpec } from './config/normalize';
+import { renderJson } from './output/json';
+import { writeJUnit } from './output/junit';
+import { renderPlan, renderText } from './output/text';
+import { PRESETS } from './presets';
+import { verify } from './verify';
+import { VERSION } from './version';
 
-import { Command } from 'commander';
-import { VERSION } from './index';
-import { Colors } from './output/formatters';
-import { handleValidate, handleValidateError } from './cli/commands/validate';
-import { handleInit, handleInitError } from './cli/commands/init';
-import { Nodrift } from './core';
-import { loadSchema } from './config/schema';
-import { getLogger } from './common/logger';
-import { getEventBus } from './infrastructure/events/event-bus';
-import { getPluginManager } from './infrastructure/plugins/plugin-system';
-import { MetricsPlugin } from './infrastructure/plugins/builtin/metrics-plugin';
-import { FileVerificationRepository } from './infrastructure/repositories/verification-repository';
-
-const logger = getLogger();
-
-// Disable colors if output is not a TTY
-if (!process.stdout.isTTY) {
-  Colors.disable();
+interface CommonOptions {
+  verbose?: boolean;
+  envFile: boolean;
 }
 
-const program = new Command();
+interface VerifyCliOptions extends CommonOptions {
+  output: 'text' | 'json' | 'junit';
+  junitFile: string;
+  failOnDrift?: boolean;
+  plan?: boolean;
+  block?: BlockSpec;
+  compactJson?: boolean;
+  quiet?: boolean;
+}
 
-program
-  .name('nodrift')
-  .description(
-    'Nodrift - Dual-State Contract Verification (Enhanced).\n\n' +
-      'Verifies that on-chain contract state matches your YAML configuration.\n' +
-      'Perfect for CI/CD pipelines, audits, and drift detection.'
-  )
-  .version(VERSION);
+function parseBlock(value: string): BlockSpec {
+  if (value === 'latest' || value === 'safe' || value === 'finalized') return value;
+  if (/^\d+$/.test(value)) return Number(value);
+  throw new InvalidArgumentError('expected a block number, latest, safe or finalized');
+}
 
-// Validate command (unchanged)
-program
-  .command('validate')
-  .description('Validate configuration file without connecting to blockchain')
-  .argument('<config-file>', 'Path to YAML configuration file')
-  .option('-v, --verbose', 'Show detailed validation errors', false)
-  .action(async (configFile: string, options) => {
-    try {
-      await handleValidate(configFile, options);
-      process.exit(0);
-    } catch (error: unknown) {
-      handleValidateError(error, options);
+/** Load `.env` next to the config, else in the working directory. Existing variables win. */
+function loadEnvFile(configFile: string): void {
+  for (const dir of [path.dirname(path.resolve(configFile)), process.cwd()]) {
+    const file = path.join(dir, '.env');
+    if (fs.existsSync(file)) {
+      process.loadEnvFile(file);
+      logger.debug(`loaded environment from ${file}`);
+      return;
     }
-  });
-
-// Init command (unchanged)
-program
-  .command('init')
-  .description('Interactive configuration generator - creates a new Nodrift config file')
-  .action(async () => {
-    try {
-      await handleInit();
-      process.exit(0);
-    } catch (error: unknown) {
-      handleInitError(error);
-    }
-  });
-
-// Presets command (unchanged)
-program
-  .command('presets')
-  .description('List available presets for common contract standards')
-  .action(() => {
-    console.log('\n📦 Available Presets:\n');
-    const presetDescriptions: Record<string, string> = {
-      erc20: 'ERC20 token standard - totalSupply, balanceOf, allowance, decimals, symbol, name',
-      erc721: 'ERC721 NFT standard - totalSupply, balanceOf, ownerOf, tokenURI, symbol, name',
-      erc1155: 'ERC1155 multi-token standard - balanceOf, balanceOfBatch, uri, isApprovedForAll',
-      erc4626: 'ERC4626 tokenized vault standard - totalAssets, asset, convertToShares, convertToAssets',
-      diamond: 'Diamond pattern (EIP-2535) - facets, facetAddress, facetFunctionSelectors',
-      proxy: 'ERC1967 proxy pattern - implementation, admin verification',
-      accessControl: 'OpenZeppelin AccessControl - role membership verification',
-    };
-
-    for (const [name, description] of Object.entries(presetDescriptions)) {
-      console.log(`  ${Colors.CYAN(name.padEnd(15))} ${description}`);
-    }
-
-    console.log('\n💡 Usage in YAML:');
-    console.log('  contracts:');
-    console.log('    MyToken:');
-    console.log('      preset: erc20');
-    console.log('      address: "${TOKEN_ADDRESS}"');
-    console.log('      # Preset automatically includes ABI and common state checks\n');
-    process.exit(0);
-  });
-
-// Enhanced verify command with plugin support
-program
-  .argument('<config-file>', 'Path to YAML configuration file')
-  .option(
-    '-o, --output <format>',
-    'Output format (text, json, or junit)',
-    (value) => {
-      if (value !== 'text' && value !== 'json' && value !== 'junit') {
-        throw new Error('Output format must be "text", "json", or "junit"');
-      }
-      return value;
-    },
-    'text'
-  )
-  .option(
-    '--junit-file <path>',
-    'Path to write JUnit XML file (default: test-results/nodrift-junit.xml)',
-    'test-results/nodrift-junit.xml'
-  )
-  .option(
-    '--fail-on-drift',
-    'Exit with error code 1 if drift is detected (CI/CD mode)',
-    false
-  )
-  .option('--compact-json', 'Use compact JSON output (no indentation)', false)
-  .option(
-    '-q, --quiet',
-    'Suppress non-essential output (only show drifts/errors)',
-    false
-  )
-  .option('-v, --verbose', 'Enable verbose logging', false)
-  .option(
-    '--plan',
-    'Show Terraform-style plan output (grouped by contract, with summary)',
-    false
-  )
-  // New options for enhanced architecture
-  .option('--enable-metrics', 'Enable metrics collection plugin', false)
-  .option('--enable-history', 'Save verification results to history', false)
-  .option('--history-path <path>', 'Path to history storage', '.nodrift/history')
-  .option('--use-v2', 'Use enhanced architecture (v2)', false)
-  .option('--show-events', 'Show event log after verification', false)
-  .action(async (configFile: string, options) => {
-    try {
-      if (options.useV2) {
-        // Use enhanced architecture
-        await handleVerifyV2(configFile, options);
-      } else {
-        // Use original implementation
-        const { handleVerify } = await import('./cli/commands/verify');
-        await handleVerify(configFile, options);
-      }
-    } catch (error: unknown) {
-      const { handleVerifyError } = await import('./cli/commands/verify');
-      handleVerifyError(error, options);
-    }
-  });
-
-/**
- * Enhanced verify handler with plugin support.
- */
-async function handleVerifyV2(configFile: string, options: any): Promise<void> {
-  const startTime = Date.now();
-
-  // Setup infrastructure
-  const eventBus = getEventBus();
-  const pluginManager = getPluginManager();
-
-  // Register plugins based on options
-  if (options.enableMetrics) {
-    pluginManager.register(new MetricsPlugin());
-    logger.info('Metrics plugin enabled');
   }
+}
 
-  // Setup repository if history is enabled
-  let repository: FileVerificationRepository | null = null;
-  if (options.enableHistory) {
-    repository = new FileVerificationRepository(options.historyPath);
-    logger.info(`History enabled: ${options.historyPath}`);
+function setup(file: string, options: CommonOptions): void {
+  setLogLevel(options.verbose ? 'debug' : 'warn');
+  if (options.envFile) loadEnvFile(file);
+}
+
+function fail(error: unknown, verbose?: boolean): ExitCode {
+  const code = exitCodeForError(error);
+  process.stderr.write(`${style.red('error:')} ${errorMessage(error)}\n`);
+  if (!(error instanceof NodriftError)) {
+    process.stderr.write(
+      verbose && error instanceof Error && error.stack ? `${error.stack}\n` : 'Run with --verbose for details.\n',
+    );
   }
+  return code;
+}
 
-  // Subscribe to events if requested
-  const events: any[] = [];
-  if (options.showEvents) {
-    eventBus.onAny((event) => {
-      events.push(event);
-    });
-  }
-
+async function runVerify(file: string, options: VerifyCliOptions): Promise<ExitCode> {
   try {
-    // Load configuration
-    const config = loadSchema(configFile);
-
-    // Create Nodrift instance
-    const nodrift = new Nodrift(config);
-
-    // Initialize plugins
-    await pluginManager.initialize({
-      config,
-      sessionId: nodrift.getSessionId(),
-      eventBus,
-      logger,
-    });
-
-    if (!options.quiet) {
-      console.log(Colors.CYAN('\n🔍 Running verification (enhanced mode)...\n'));
-    }
-
-    // Run verification
-    const result = await nodrift.run();
-
-    if (!result.ok) {
-      throw result.error;
-    }
-
-    const verificationResult = result.value;
-    const duration = Date.now() - startTime;
-
-    // Save to history if enabled
-    if (repository) {
-      await repository.save({
-        id: `ver-${Date.now()}`,
-        sessionId: nodrift.getSessionId(),
-        timestamp: Date.now(),
-        configFile,
-        result: verificationResult,
-        duration,
-        success: verificationResult.diffs.length === 0,
-        driftCount: verificationResult.diffs.length,
-      });
-    }
-
-    // Output results
+    setup(file, options);
+    const config = loadConfig(file);
+    const result = await verify(config, { block: options.block });
     if (options.output === 'json') {
-      const output = {
-        success: verificationResult.diffs.length === 0,
-        drifts: verificationResult.diffs,
-        duration,
-        sessionId: nodrift.getSessionId(),
-      };
-      console.log(
-        options.compactJson
-          ? JSON.stringify(output)
-          : JSON.stringify(output, null, 2)
-      );
+      process.stdout.write(`${renderJson(result, options.compactJson)}\n`);
     } else {
-      // Text output
-      if (verificationResult.diffs.length === 0) {
-        console.log(Colors.GREEN('✅ No drifts detected'));
-      } else {
-        console.log(Colors.RED(`❌ ${verificationResult.diffs.length} drift(s) detected:`));
-        for (const diff of verificationResult.diffs) {
-          console.log(`\n  Contract: ${Colors.CYAN(diff.contractName || 'unknown')}`);
-          console.log(`  Key: ${diff.stateKey}`);
-          console.log(`  Expected: ${Colors.GREEN(String(diff.desiredValue))}`);
-          console.log(`  Actual: ${Colors.RED(String(diff.currentValue))}`);
-        }
-      }
-
-      console.log(`\n⏱️  Duration: ${duration}ms`);
-      console.log(`🆔 Session: ${nodrift.getSessionId()}`);
-    }
-
-    // Show metrics if enabled
-    if (options.enableMetrics) {
-      const metricsPlugin = pluginManager.getPlugin('metrics') as MetricsPlugin;
-      const metrics = metricsPlugin?.getMetrics();
-      if (metrics) {
-        console.log('\n📊 Metrics:');
-        console.log(`  Contracts Read: ${metrics.contractsRead}`);
-        console.log(`  Contracts Failed: ${metrics.contractsFailed}`);
-        console.log(`  Total Drifts: ${metrics.totalDrifts}`);
-        console.log(`  RPC Calls: ${metrics.rpcCalls}`);
-        console.log(`  Cache Hits: ${metrics.cacheHits}`);
-        console.log(`  Cache Misses: ${metrics.cacheMisses}`);
+      const report = options.plan ? renderPlan(result) : renderText(result, { quiet: options.quiet });
+      process.stdout.write(`${report}\n`);
+      if (options.output === 'junit') {
+        writeJUnit(result, options.junitFile);
+        process.stdout.write(style.dim(`JUnit report written to ${options.junitFile}\n`));
       }
     }
-
-    // Show events if requested
-    if (options.showEvents && events.length > 0) {
-      console.log('\n📋 Event Log:');
-      for (const event of events) {
-        console.log(`  [${new Date(event.timestamp).toISOString()}] ${event.type}`);
-      }
-    }
-
-    // Cleanup
-    await pluginManager.destroy();
-
-    // Exit with error if drifts detected and fail-on-drift is set
-    if (options.failOnDrift && verificationResult.diffs.length > 0) {
-      process.exit(1);
-    }
-
-    process.exit(0);
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(Colors.RED(`\n❌ Verification failed: ${errorMessage}\n`));
-
-    // Cleanup on error
-    await pluginManager.destroy();
-
-    process.exit(1);
+    return exitCodeForResult(result, options.failOnDrift ?? false);
+  } catch (error) {
+    return fail(error, options.verbose);
   }
 }
 
-// Parse command line arguments
-if (require.main === module) {
-  program.parse();
+function runValidate(file: string, options: CommonOptions): ExitCode {
+  try {
+    setup(file, options);
+    const config = loadConfig(file);
+    const chains = [...new Set(config.networks.map((n) => n.chainId))].join(', ');
+    process.stdout.write(
+      `${style.green('✓')} ${file} is valid: ${config.contracts.length} contract(s), ` +
+        `${config.checks.length} check(s), chain ${chains}\n`,
+    );
+    return ExitCode.SUCCESS;
+  } catch (error) {
+    return fail(error, options.verbose);
+  }
 }
 
-export { program as enhancedMain };
+export function buildProgram(): Command {
+  const program = new Command()
+    .name('nodrift')
+    .description('Verify that deployed smart contract state matches a YAML config.')
+    .version(VERSION)
+    .showHelpAfterError();
+
+  program
+    .command('verify', { isDefault: true })
+    .description('read on-chain state and compare it with the config (default command)')
+    .argument('<config>', 'path to the YAML config')
+    .addOption(new Option('-o, --output <format>', 'report format').choices(['text', 'json', 'junit']).default('text'))
+    .option('--junit-file <path>', 'where --output junit writes its report', 'test-results/nodrift-junit.xml')
+    .option('--fail-on-drift', 'exit with code 1 when drift is found')
+    .option('--plan', 'print a Terraform-style plan of drifted state')
+    .option('--block <block>', 'block number or tag to read at (latest, safe, finalized)', parseBlock)
+    .option('--compact-json', 'print JSON on a single line')
+    .option('-q, --quiet', 'only print drift, errors and the summary')
+    .option('-v, --verbose', 'log RPC activity to stderr')
+    .option('--no-env-file', 'do not load a .env file')
+    .action(async (file: string, options: VerifyCliOptions) => {
+      process.exitCode = await runVerify(file, options);
+    });
+
+  program
+    .command('validate')
+    .description('check a config offline: schema, ABI lookups and value types')
+    .argument('<config>', 'path to the YAML config')
+    .option('-v, --verbose', 'show stack traces for unexpected errors')
+    .option('--no-env-file', 'do not load a .env file')
+    .action((file: string, options: CommonOptions) => {
+      process.exitCode = runValidate(file, options);
+    });
+
+  program
+    .command('init')
+    .description('create a config interactively')
+    .argument('[output]', 'file to write', 'nodrift.yaml')
+    .action(async (output: string) => {
+      try {
+        await runInit(output);
+      } catch (error) {
+        process.exitCode = fail(error);
+      }
+    });
+
+  program
+    .command('presets')
+    .description('list built-in ABI presets')
+    .action(() => {
+      for (const [name, preset] of Object.entries(PRESETS)) {
+        process.stdout.write(`${style.cyan(name.padEnd(14))} ${preset.description}\n`);
+      }
+    });
+
+  return program;
+}
+
+if (require.main === module) {
+  buildProgram()
+    .parseAsync()
+    .catch((error: unknown) => {
+      process.exitCode = fail(error, true);
+    });
+}

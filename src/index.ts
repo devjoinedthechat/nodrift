@@ -1,32 +1,41 @@
-/** Nodrift - Smart contract state verification for Ethereum. */
+/** Library entry point. The CLI is a thin layer over these functions. */
 
-export const VERSION = '2.0.0';
+export { VERSION } from './version';
 
-// Core exports
-export * from './common/exceptions';
-export * from './common/logger';
-export * from './common/utils';
-export * from './common/result-type';
-export * from './config/schema';
-export * from './config/plugin-config';
-export * from './chain-reader';
-export * from './reconciliator/index';
-export { Diff } from './reconciliator/diff';
+export { loadConfig, loadRawConfig, type LoadOptions } from './config/load';
+export {
+  normalize,
+  type BlockSpec,
+  type Check,
+  type ContractInfo,
+  type NetworkSettings,
+  type NormalizedConfig,
+} from './config/normalize';
+export {
+  ConfigSchema,
+  StateEntrySchema,
+  type Metric,
+  type Operator,
+  type RawConfig,
+  type RawStateEntry,
+  type StateType,
+} from './config/schema';
 
-// Core
-export { Nodrift, runFromFile } from './core';
-export type { VerificationResult } from './core';
+export {
+  verify,
+  verifyFile,
+  type NetworkReport,
+  type Summary,
+  type VerificationResult,
+  type VerifyOptions,
+} from './verify';
+export type { CheckResult, CheckStatus } from './check/evaluate';
+export type { Typed } from './check/values';
 
-// Infrastructure exports
-export * from './infrastructure/events/event-bus';
-export * from './infrastructure/events/domain-events';
-export * from './infrastructure/plugins/plugin-system';
-export * from './infrastructure/repositories/verification-repository';
-export * from './infrastructure/ports/blockchain-provider.port';
-export * from './infrastructure/adapters/ethers-provider.adapter';
+export { renderText, renderPlan, summaryLine } from './output/text';
+export { renderJson } from './output/json';
+export { renderJUnit, writeJUnit } from './output/junit';
 
-// Pattern exports
-export * from './patterns/dependency-graph';
-export * from './patterns/ddd';
-export * from './common/worker-pool';
-export * from './common/di-container';
+export { ExitCode, exitCodeForError, exitCodeForResult } from './common/exit-codes';
+export { CheckError, ConfigurationError, ConnectionError, NodriftError, ValidationError } from './common/errors';
+export { PRESETS, type Preset } from './presets';

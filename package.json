@@ -1,92 +1,85 @@
 {
   "name": "nodrift",
-  "version": "2.0.0",
-  "description": "Verify that on-chain Ethereum smart contract state matches a YAML configuration. Built for CI/CD, audits, and drift detection.",
+  "version": "0.1.0",
+  "description": "Verify that deployed smart contract state matches a YAML config. Drift detection for EVM chains, built for CI.",
   "keywords": [
     "ethereum",
+    "evm",
     "smart-contracts",
+    "drift-detection",
     "verification",
-    "ci-cd",
-    "blockchain",
-    "devops",
-    "typescript",
+    "monitoring",
+    "multicall",
+    "ci",
     "junit",
-    "test-reporting"
+    "solidity"
   ],
-  "homepage": "https://github.com/your-org/nodrift#readme",
+  "homepage": "https://github.com/devjoinedthechat/nodrift#readme",
   "bugs": {
-    "url": "https://github.com/your-org/nodrift/issues"
+    "url": "https://github.com/devjoinedthechat/nodrift/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-org/nodrift.git"
+    "url": "git+https://github.com/devjoinedthechat/nodrift.git"
   },
   "license": "MIT",
-  "author": "Nodrift Contributors",
+  "author": "Nodrift contributors",
   "type": "commonjs",
-  "main": "dist/index.js",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema.json": "./nodrift.schema.json",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "nodrift": "dist/cli.js"
   },
-  "directories": {
-    "doc": "docs",
-    "example": "examples"
-  },
   "files": [
     "dist",
-    "examples",
-    "templates",
     "nodrift.schema.json",
-    "README.md",
-    "LICENSE"
+    "examples",
+    "templates"
   ],
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "dev": "tsx src/cli.ts",
-    "start": "node dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\" \"*.{js,mjs}\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\" \"*.{js,mjs}\"",
     "test": "jest",
-    "test:watch": "jest --watch",
+    "test:unit": "jest tests/unit",
+    "test:e2e": "jest tests/e2e",
     "test:coverage": "jest --coverage",
-    "test:unit": "jest --testPathPattern='src/.*\\.test\\.ts$'",
-    "test:integration": "jest --testPathPattern='tests/integration'",
-    "test:e2e": "npm run build && jest --testPathPattern='tests/e2e'",
-    "test:ci": "jest --ci --coverage --maxWorkers=2",
-    "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix",
-    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist node_modules coverage",
-    "pretest": "npm run type-check",
-    "prepublishOnly": "npm run clean && npm install && npm run build && npm test"
+    "schema": "tsx scripts/generate-schema.ts",
+    "fixtures": "bash scripts/build-fixtures.sh",
+    "prepack": "npm run build"
   },
   "dependencies": {
-    "@types/inquirer": "^9.0.9",
-    "chalk": "^4.1.2",
-    "commander": "^11.1.0",
-    "dotenv": "^16.3.1",
-    "ethers": "^6.9.0",
-    "inquirer": "^13.1.0",
-    "js-yaml": "^4.1.0",
-    "uuid": "^13.0.0",
-    "zod": "^4.3.6"
+    "@inquirer/prompts": "^8.7.3",
+    "commander": "^15.0.0",
+    "ethers": "^6.17.0",
+    "js-yaml": "^4.3.2",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.11",
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20.10.0",
-    "@types/uuid": "^10.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.15.0",
-    "@typescript-eslint/parser": "^6.15.0",
-    "eslint": "^8.56.0",
-    "jest": "^29.7.0",
-    "prettier": "^3.1.1",
-    "ts-jest": "^29.1.1",
-    "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
-  },
-  "engines": {
-    "node": ">=16.0.0"
+    "@types/node": "^22.19.0",
+    "eslint": "^10.12.0",
+    "jest": "^30.5.2",
+    "prettier": "^3.9.10",
+    "ts-jest": "^29.4.14",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.2"
   }
 }
