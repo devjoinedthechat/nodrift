@@ -314,8 +314,11 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install nodrift
+        run: npm install --global github:devjoinedthechat/nodrift
+
       - name: Check on-chain state
-        run: npx nodrift@latest nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
+        run: nodrift nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
         env:
           RPC_URL: ${{ secrets.RPC_URL }}
 
@@ -341,7 +344,8 @@ nodrift:
   image: node:22
   stage: test
   script:
-    - npx nodrift@latest nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
+    - npm install --global github:devjoinedthechat/nodrift
+    - nodrift nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
   artifacts:
     when: always
     paths:
@@ -357,7 +361,8 @@ GitLab shows the JUnit results in merge requests and on the pipeline's Tests tab
 Any runner with Node.js 22.13 or newer works:
 
 ```bash
-npx nodrift@latest nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
+npm install --global github:devjoinedthechat/nodrift
+nodrift nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
 ```
 
 Point the system's JUnit test report step at `test-results/nodrift.xml`, and keep it running when the command fails (the equivalent of `if: always()`). Use `--output json` when another program consumes the result.
@@ -367,7 +372,7 @@ Point the system's JUnit test report step at `test-results/nodrift.xml`, and kee
 `nodrift validate` checks a config without contacting the chain: structure, function lookups and value types. It still resolves variables, so they need values of the right shape, but not real ones:
 
 ```bash
-RPC_URL=https://rpc.invalid npx nodrift@latest validate nodrift.yaml --no-env-file
+RPC_URL=https://rpc.invalid nodrift validate nodrift.yaml --no-env-file
 ```
 
 `rpc_url` must look like an HTTP(S) URL, and variables used as addresses need a valid address, for example `0x0000000000000000000000000000000000000000`. `validate` exits with `0` when the config is valid, `2` when it cannot be loaded and `5` when it is invalid.
@@ -378,5 +383,5 @@ RPC_URL=https://rpc.invalid npx nodrift@latest validate nodrift.yaml --no-env-fi
 - Keep the RPC URL in a secret. Reports, logs and error messages show only its host.
 - For scheduled monitoring on chains with finality, `block: finalized` (or `--block finalized`) reads state that can no longer be reorganized.
 - A report names the block it read. To reproduce it, run the same config with `--block <number>`. Reading older state requires an endpoint that serves historical state (an archive node).
-- `npx nodrift@latest` runs the newest release on every build. Pin a version (`npx nodrift@<version>`, or a dev dependency) to make upgrades explicit.
+- `npm install --global github:devjoinedthechat/nodrift` installs the latest commit on `main`. Pin a commit (`github:devjoinedthechat/nodrift#<commit>`) to make upgrades explicit.
 - In CI, `--no-env-file` makes sure that a stray `.env` file in the repository is not loaded. Variables set by the CI system take precedence over `.env` in any case.

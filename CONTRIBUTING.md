@@ -19,12 +19,12 @@ Run the CLI from source with `npm run dev -- <args>`, for example `npm run dev -
 
 Every pull request must pass these, which is what CI runs:
 
-| Command | What it does |
-| --- | --- |
-| `npm run lint` | ESLint |
-| `npm run format:check` | Prettier (`npm run format` fixes it) |
-| `npm run typecheck` | TypeScript, strict mode |
-| `npm test` | Unit tests and end-to-end tests against anvil |
+| Command                | What it does                                  |
+| ---------------------- | --------------------------------------------- |
+| `npm run lint`         | ESLint                                        |
+| `npm run format:check` | Prettier (`npm run format` fixes it)          |
+| `npm run typecheck`    | TypeScript, strict mode                       |
+| `npm test`             | Unit tests and end-to-end tests against anvil |
 
 The end-to-end tests are skipped locally when `anvil` is not installed, and required in CI.
 
@@ -52,4 +52,4 @@ tests/e2e/    tests against anvil with the contracts in tests/fixtures
 
 ## Releases
 
-Maintainers release by bumping the version in `package.json` and `src/version.ts`, updating `CHANGELOG.md`, and pushing a `vX.Y.Z` tag. The release workflow tests, publishes to npm and creates the GitHub release.
+Maintainers release by bumping the version in `package.json` and `src/version.ts`, updating `CHANGELOG.md`, and pushing a `vX.Y.Z` tag. The release workflow runs the tests and creates the GitHub release. It also publishes to npm once an `NPM_TOKEN` repository secret is configured; until then, nodrift is installed from GitHub.

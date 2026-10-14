@@ -5,15 +5,15 @@ Configs for contracts on Ethereum mainnet: tokens, Uniswap V2, Chainlink price f
 ## Running an example
 
 ```bash
-RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY npx nodrift examples/basic/01-erc20-token.yaml
+RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY nodrift examples/basic/01-erc20-token.yaml
 ```
 
-From a clone of the repository, run `npm ci && npm run build` first; `npx nodrift` then uses the local build. `RPC_URL` can also come from a `.env` file in the working directory (see [`.env.example`](../.env.example)).
+This needs nodrift installed (see [Install](../README.md#install)). In a clone of the repository, `npm ci` builds the CLI and `npx nodrift` runs that build. `RPC_URL` can also come from a `.env` file in the working directory (see [`.env.example`](../.env.example)).
 
 To check an example without contacting the chain, validate it:
 
 ```bash
-RPC_URL=https://rpc.invalid npx nodrift validate examples/basic/01-erc20-token.yaml
+RPC_URL=https://rpc.invalid nodrift validate examples/basic/01-erc20-token.yaml
 ```
 
 ## Expected values are snapshots
@@ -21,9 +21,9 @@ RPC_URL=https://rpc.invalid npx nodrift validate examples/basic/01-erc20-token.y
 The expected values match Ethereum mainnet as of October 2026. Balances, supplies, reserves, fee settings and treasury holdings change, so checks will start to drift over time. [`basic/05-drift-demo.yaml`](basic/05-drift-demo.yaml) contains one deliberately stale value, which makes it a quick way to see drift in each report format:
 
 ```bash
-npx nodrift examples/basic/05-drift-demo.yaml
-npx nodrift examples/basic/05-drift-demo.yaml --plan
-npx nodrift examples/basic/05-drift-demo.yaml --output json
+nodrift examples/basic/05-drift-demo.yaml
+nodrift examples/basic/05-drift-demo.yaml --plan
+nodrift examples/basic/05-drift-demo.yaml --output json
 ```
 
 None of these commands use `--fail-on-drift`, so drift is reported and the exit code stays `0`.

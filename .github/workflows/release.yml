@@ -9,8 +9,11 @@ permissions:
   id-token: write
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
+    env:
+      # Publishing to npm is skipped until an NPM_TOKEN repository secret is configured.
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -23,11 +26,12 @@ jobs:
       - name: Check that the tag matches package.json
         run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
       - run: npm test
-      # npm only accepts provenance statements from public repositories
-      - run: npm publish --access public ${{ github.event.repository.private && ' ' || '--provenance' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub release
         run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}

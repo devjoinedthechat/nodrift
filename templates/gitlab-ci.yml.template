@@ -11,7 +11,9 @@ nodrift:
   image: node:22
   stage: test
   script:
-    - npx nodrift@latest nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
+    # Pin a commit for reproducible runs: github:devjoinedthechat/nodrift#<commit>
+    - npm install --global github:devjoinedthechat/nodrift
+    - nodrift nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
   artifacts:
     when: always
     paths:

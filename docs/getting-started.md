@@ -10,15 +10,17 @@ This guide installs nodrift, writes a first config for the USDC token on Ethereu
 
 ## Install
 
+nodrift is not published to the npm registry yet. Install it from GitHub; npm builds it during installation:
+
 ```bash
-npm install -g nodrift
+npm install --global github:devjoinedthechat/nodrift
 nodrift --version
 ```
 
-To pin nodrift per project instead, install it as a dev dependency and run it with `npx`:
+To pin nodrift per project instead, add it as a dev dependency (the lockfile records the exact commit) and run it with `npx`:
 
 ```bash
-npm install --save-dev nodrift
+npm install --save-dev github:devjoinedthechat/nodrift
 npx nodrift --version
 ```
 

@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg">
-    <img alt="nodrift" src=".github/assets/logo-light.svg" width="300">
+    <img alt="nodrift" src=".github/assets/logo-light.svg" width="260">
   </picture>
 </p>
 
@@ -13,12 +13,13 @@
 <p align="center">
   <a href="https://github.com/devjoinedthechat/nodrift/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/devjoinedthechat/nodrift/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-  <a href="package.json"><img alt="Node.js 22.13+" src="https://img.shields.io/badge/node-%E2%89%A522.13-339933?logo=nodedotjs&logoColor=white"></a>
+  <a href="#install"><img alt="Node.js 22.13+" src="https://img.shields.io/badge/node-%E2%89%A522.13-339933?logo=nodedotjs&logoColor=white"></a>
   <a href="tsconfig.json"><img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white"></a>
   <a href="#how-it-works"><img alt="Any EVM chain" src="https://img.shields.io/badge/EVM-any%20chain-627EEA?logo=ethereum&logoColor=white"></a>
 </p>
 
 <p align="center">
+  <a href="#install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="docs/README.md">Documentation</a> ·
   <a href="docs/state-types.md">Check types</a> ·
@@ -48,23 +49,42 @@ USDC  0xA0b8…eB48 · chain 1
 6 checks: 5 passed, 1 drifted, 0 errors · 1 contract · 1903 ms
 ```
 
+> [!NOTE]
+> nodrift is at version 0.x. The config format may still change before 1.0; every change is listed in the [changelog](CHANGELOG.md).
+
 ## Features
 
 - **One consistent snapshot.** Each network is read at a single pinned block (`latest`, `safe`, `finalized` or a number), after checking that the RPC endpoint is on the chain you configured.
 - **Few requests.** Calls are batched through [Multicall3](https://www.multicall3.com) when it is deployed, and identical calls are made once.
-- **Exact comparisons.** Expected values are typed against the ABI and compared as integers, so a uint256 is never rounded through a float. Tolerances, ranges, operators and regular expressions are available when exact equality is not what you want.
+- **Exact comparisons.** Expected values are typed against the ABI and compared as integers, so a uint256 is never rounded through a float. Tolerances, ranges, operators and regular expressions are there for when exact equality is not what you want.
 - **Configs are checked before they run.** Unknown keys, bad address checksums, missing functions and mistyped values are reported with their exact location. `nodrift validate` does this offline.
 - **Failures are never silent.** A check that cannot be read (revert, missing code, unreachable RPC) is an error with its own exit code, not a pass.
-- **Read-only and safe to run on untrusted configs.** No transactions, no command execution from configs, file references confined to the project, and RPC URLs reduced to their host in every report.
+- **Read-only and safe on untrusted configs.** No transactions, no command execution from configs, file references confined to the project, and RPC URLs reduced to their host in every report and error.
 - **Reports for people and machines.** Terminal output, a Terraform-style plan, JSON with exact integers, and JUnit XML for CI test views.
+
+## Install
+
+nodrift needs Node.js 22.13 or newer. It is not published to the npm registry yet; install it from GitHub, which builds it during installation:
+
+```bash
+npm install --global github:devjoinedthechat/nodrift
+nodrift --version
+```
+
+To pin a version, for example in CI, add a commit: `github:devjoinedthechat/nodrift#<commit>`.
+
+Or build it from source:
+
+```bash
+git clone https://github.com/devjoinedthechat/nodrift.git
+cd nodrift
+npm ci       # installs dependencies and builds dist/
+npm link     # puts `nodrift` on your PATH
+```
 
 ## Quick start
 
-```bash
-npm install --save-dev nodrift     # or: npm install --global nodrift
-```
-
-Write the state you expect to `nodrift.yaml`:
+Save this as `nodrift.yaml`. It checks USDC on Ethereum mainnet: who controls it, whether it is paused, and that no unexpected mint has pushed the supply past a ceiling.
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/devjoinedthechat/nodrift/main/nodrift.schema.json
@@ -73,61 +93,103 @@ network:
   chain_id: 1
 
 contracts:
+  USDC:
+    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
+    preset: erc20
+    state:
+      - type: owner
+        value: '0xFcb19e6a322b27c06842A71e8c725399f049AE3a'
+      - type: variable
+        name: 'masterMinter() returns (address)'
+        value: '0xE982615d461DD5cD06575BbeA87624fda4e3de17'
+      - type: variable
+        name: 'paused() returns (bool)'
+        value: false
+      - type: variable
+        name: decimals
+        value: 6
+      - type: variable
+        name: totalSupply
+        value: '100000000000000000' # 100B USDC
+        options:
+          comparison: '<'
+          description: no unexpected mint
+```
+
+Point it at any Ethereum mainnet RPC endpoint and run it:
+
+```bash
+export RPC_URL=https://ethereum-rpc.publicnode.com   # or your own endpoint, or a .env file next to the config
+nodrift validate nodrift.yaml                         # offline: schema, ABI lookups, value types
+nodrift nodrift.yaml                                  # read the chain and compare
+```
+
+```text
+nodrift v0.1.0 · nodrift.yaml
+chain 1 via ethereum-rpc.publicnode.com · block 26192946 · multicall
+
+USDC  0xA0b8…eB48 · chain 1
+  ✓ owner()       0xFcb19e6a322b27c06842A71e8c725399f049AE3a
+  ✓ masterMinter  0xE982615d461DD5cD06575BbeA87624fda4e3de17
+  ✓ paused        false
+  ✓ decimals      6
+  ✓ totalSupply   48164427836516894 (no unexpected mint)
+
+5 checks: 5 passed, 0 drifted, 0 errors · 1 contract · 2122 ms
+```
+
+Change an expected value and run it again to see drift, or try `--plan` and `--output json`. `nodrift init` builds a starter config for your own contracts interactively and can fetch verified ABIs from Etherscan.
+
+## Checks for your own contracts
+
+Functions come from a [preset](docs/presets.md), an ABI file (plain ABI or a Foundry/Hardhat artifact), or an inline signature such as `"balanceOf(address) returns (uint256)"`, so most configs need no ABI files. Addresses and other values can come from environment variables:
+
+```yaml
+network:
+  rpc_url: ${RPC_URL}
+  chain_id: 1
+
+contracts:
   Vault:
-    address: "${VAULT_ADDRESS}"
+    address: '${VAULT_ADDRESS}'
     preset: erc4626
     state:
       - type: owner
-        value: "${MULTISIG}"
+        value: '${MULTISIG}'
       - type: proxy
         checks:
-          implementation: "${VAULT_IMPLEMENTATION}"
+          implementation: '${VAULT_IMPLEMENTATION}'
       - type: role
         role: PAUSER_ROLE
-        account: "${GUARDIAN}"
+        account: '${GUARDIAN}'
       - type: variable
         name: asset
-        value: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-      - type: variable
-        name: "paused() returns (bool)"
-        value: false
+        value: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
       - type: function_call
-        function: "withdrawalFee() returns (uint256)"
+        function: 'withdrawalFee() returns (uint256)'
         value: 50
         options:
-          comparison: "<="
+          comparison: '<='
           description: fee in basis points, at most 0.5%
 ```
 
-Then run it:
-
-```bash
-export RPC_URL=https://...           # or put it in a .env file next to the config
-npx nodrift validate nodrift.yaml    # offline: schema, ABI lookups, value types
-npx nodrift nodrift.yaml             # read the chain and compare
-```
-
-`npx nodrift init` builds a starter config interactively and can fetch verified ABIs from Etherscan.
-
-Functions can come from a [preset](docs/presets.md), an ABI file (plain ABI or a Foundry/Hardhat artifact), or an inline signature such as `"balanceOf(address) returns (uint256)"`, so most configs need no ABI files at all.
-
 ## What you can check
 
-| Type | Checks | Example |
-| --- | --- | --- |
-| `owner` | `owner()` (falls back to `getOwner()`) | `value: "0x…"` |
-| `role` | `hasRole(role, account)`, or the exact member set of an enumerable role | `role: MINTER_ROLE`, `account: "0x…"` |
-| `variable` | a public variable or zero-argument getter | `name: paused`, `value: false` |
-| `function_call` | any view function, with arguments and a selected output | `function: balanceOf`, `args: ["0x…"]` |
-| `storage_slot` | a raw slot or a packed field in it | `slot: 0`, `options: { offset: 20, size: 12 }` |
-| `proxy` | ERC-1967 implementation, admin and beacon slots | `checks: { implementation: "0x…" }` |
-| `array_state` | length, membership, exact contents of an array return value | `checks: { contains: ["0x…"] }` |
-| `mapping_state` | several keys of a mapping getter, including nested mappings | `keys: [{ key: "0x…", value: 1 }]` |
-| `cross_contract` | a function of another contract in the config | `target_contract: Token` |
-| `aggregate` | `sum`, `count`, `average`, `min` or `max` over several reads | `operation: sum` |
-| `comparison` | two reads (or a read and a constant) against each other | `operator: ">="` |
-| `conditional` | different checks depending on a condition | `condition: { name: paused, value: true }` |
-| `time_based` | how old a timestamp is, relative to the pinned block | `max_age_seconds: 3600` |
+| Type             | Checks                                                                  | Example                                        |
+| ---------------- | ----------------------------------------------------------------------- | ---------------------------------------------- |
+| `owner`          | `owner()` (falls back to `getOwner()`)                                  | `value: "0x…"`                                 |
+| `role`           | `hasRole(role, account)`, or the exact member set of an enumerable role | `role: MINTER_ROLE`, `account: "0x…"`          |
+| `variable`       | a public variable or zero-argument getter                               | `name: paused`, `value: false`                 |
+| `function_call`  | any view function, with arguments and a selected output                 | `function: balanceOf`, `args: ["0x…"]`         |
+| `storage_slot`   | a raw slot or a packed field in it                                      | `slot: 0`, `options: { offset: 20, size: 12 }` |
+| `proxy`          | ERC-1967 implementation, admin and beacon slots                         | `checks: { implementation: "0x…" }`            |
+| `array_state`    | length, membership, exact contents of an array return value             | `checks: { contains: ["0x…"] }`                |
+| `mapping_state`  | several keys of a mapping getter, including nested mappings             | `keys: [{ key: "0x…", value: 1 }]`             |
+| `cross_contract` | a function of another contract in the config                            | `target_contract: Token`                       |
+| `aggregate`      | `sum`, `count`, `average`, `min` or `max` over several reads            | `operation: sum`                               |
+| `comparison`     | two reads (or a read and a constant) against each other                 | `operator: ">="`                               |
+| `conditional`    | different checks depending on a condition                               | `condition: { name: paused, value: true }`     |
+| `time_based`     | how old a timestamp is, relative to the pinned block                    | `max_age_seconds: 3600`                        |
 
 Values can be compared with `==` (default), `!=`, `>`, `>=`, `<`, `<=`, an absolute or relative `tolerance`, a `range`, or a regular expression `pattern`. Integers can be written as `1000`, `"1_000"`, `"0x3e8"`, `"1e21"`, `"1.5 ether"` or `"30 gwei"`. See [check types](docs/state-types.md) and [comparison options](docs/comparison-options.md).
 
@@ -140,27 +202,27 @@ nodrift init [output]       create a config interactively
 nodrift presets             list built-in ABI presets
 ```
 
-| Option | Description |
-| --- | --- |
-| `-o, --output <format>` | `text` (default), `json` or `junit` |
-| `--junit-file <path>` | where `--output junit` writes (default `test-results/nodrift-junit.xml`) |
-| `--fail-on-drift` | exit with code 1 when drift is found |
-| `--plan` | Terraform-style plan of drifted state |
-| `--block <block>` | read at `latest`, `safe`, `finalized` or a block number |
-| `-q, --quiet` | only print drift, errors and the summary |
-| `--compact-json` | single-line JSON |
-| `--no-env-file` | do not load `.env` |
-| `-v, --verbose` | log RPC activity to stderr |
+| Option                  | Description                                                              |
+| ----------------------- | ------------------------------------------------------------------------ |
+| `-o, --output <format>` | `text` (default), `json` or `junit`                                      |
+| `--junit-file <path>`   | where `--output junit` writes (default `test-results/nodrift-junit.xml`) |
+| `--fail-on-drift`       | exit with code 1 when drift is found                                     |
+| `--plan`                | Terraform-style plan of drifted state                                    |
+| `--block <block>`       | read at `latest`, `safe`, `finalized` or a block number                  |
+| `-q, --quiet`           | only print drift, errors and the summary                                 |
+| `--compact-json`        | single-line JSON                                                         |
+| `--no-env-file`         | do not load `.env`                                                       |
+| `-v, --verbose`         | log RPC activity to stderr                                               |
 
-| Exit code | Meaning |
-| --- | --- |
-| `0` | all checks passed (or drift found without `--fail-on-drift`) |
-| `1` | drift found and `--fail-on-drift` set |
-| `2` | invalid command-line arguments, or the config file could not be read |
-| `3` | RPC endpoint unreachable, or on a different chain than configured |
-| `4` | at least one check could not be evaluated (always non-zero) |
-| `5` | config failed validation |
-| `6` | unexpected internal error |
+| Exit code | Meaning                                                              |
+| --------- | -------------------------------------------------------------------- |
+| `0`       | all checks passed (or drift found without `--fail-on-drift`)         |
+| `1`       | drift found and `--fail-on-drift` set                                |
+| `2`       | invalid command-line arguments, or the config file could not be read |
+| `3`       | RPC endpoint unreachable, or on a different chain than configured    |
+| `4`       | at least one check could not be evaluated (always non-zero)          |
+| `5`       | config failed validation                                             |
+| `6`       | unexpected internal error                                            |
 
 ## In CI
 
@@ -179,7 +241,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: npx nodrift@latest nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
+      - run: npm install --global github:devjoinedthechat/nodrift
+      - run: nodrift nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
         env:
           RPC_URL: ${{ secrets.RPC_URL }}
       - uses: actions/upload-artifact@v7
@@ -205,6 +268,10 @@ flowchart LR
 Everything up to "Connect" happens offline, which is what `nodrift validate` runs. Details and design decisions are in [architecture](docs/architecture.md).
 
 ## As a library
+
+```bash
+npm install github:devjoinedthechat/nodrift
+```
 
 ```ts
 import { loadConfig, renderText, verify } from 'nodrift';

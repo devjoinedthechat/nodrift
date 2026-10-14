@@ -31,8 +31,12 @@ jobs:
         with:
           node-version: 22
 
+      # Pin a commit for reproducible runs: github:devjoinedthechat/nodrift#<commit>
+      - name: Install nodrift
+        run: npm install --global github:devjoinedthechat/nodrift
+
       - name: Check on-chain state
-        run: npx nodrift@latest nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
+        run: nodrift nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
         env:
           RPC_URL: ${{ secrets.RPC_URL }}
 
