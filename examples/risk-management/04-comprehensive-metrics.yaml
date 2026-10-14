@@ -51,7 +51,7 @@ contracts:
       - type: function_call
         function: totalSupply
         args: []
-        value: "40000000000000"  # ~40B USDC
+        value: "40000000000000000"  # ~40B USDC
         options:
           tolerance: "30%"
         metric:
@@ -143,8 +143,6 @@ contracts:
         function: token0
         args: []
         value: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-        options:
-          ignore_case: true
         metric:
           name: "pool_token0_integrity"
           category: "integrity"
@@ -155,8 +153,6 @@ contracts:
         function: token1
         args: []
         value: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        options:
-          ignore_case: true
         metric:
           name: "pool_token1_integrity"
           category: "integrity"
@@ -167,7 +163,7 @@ contracts:
       - type: function_call
         function: totalSupply
         args: []
-        value: "10000000000000000000"  # At least 10 LP tokens
+        value: "1000000000000000"  # 0.001 LP: pairs with a 6-decimal token mint few LP tokens
         options:
           comparison: greater_than
         metric:
@@ -287,8 +283,6 @@ contracts:
           - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
           - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
         value: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
-        options:
-          ignore_case: true
         metric:
           name: "factory_pair_integrity"
           category: "integrity"
@@ -300,8 +294,6 @@ contracts:
         function: feeTo
         args: []
         value: "0xf38521f130fcCF29dB1961597bc5d2B60F995f85"
-        options:
-          ignore_case: true
         metric:
           name: "fee_recipient_drift"
           category: "governance"

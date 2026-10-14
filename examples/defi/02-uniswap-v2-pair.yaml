@@ -54,29 +54,23 @@ contracts:
         function: token0
         args: []
         value: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-        options:
-          ignore_case: true
       
       # Verify token1 is WETH
       - type: function_call
         function: token1
         args: []
         value: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        options:
-          ignore_case: true
       
       # Verify factory is Uniswap V2 Factory
       - type: function_call
         function: factory
         args: []
         value: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
-        options:
-          ignore_case: true
       
       # Check that pool has liquidity (total supply > 0)
       - type: function_call
         function: totalSupply
         args: []
-        value: 1000000000000000000  # At least 1 LP token
+        value: "1000000000000000"  # 0.001 LP: pairs with a 6-decimal token mint few LP tokens
         options:
           comparison: greater_than

@@ -1,0 +1,51 @@
+# Drift demo: USDC with one deliberately stale expectation.
+#
+# Every check matches Ethereum mainnet except `totalSupply`, which still expects an old
+# snapshot of about 25B USDC. Run it to see what drift looks like:
+#
+#   RPC_URL=https://... npx nodrift examples/basic/05-drift-demo.yaml
+#   RPC_URL=https://... npx nodrift examples/basic/05-drift-demo.yaml --plan
+
+version: 1
+
+network:
+  rpc_url: ${RPC_URL}
+  chain_id: 1
+
+contracts:
+  USDC:
+    address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    preset: erc20
+    state:
+      - type: variable
+        name: symbol
+        value: USDC
+
+      - type: variable
+        name: decimals
+        value: 6
+
+      # Ownable owner of the token (Circle)
+      - type: owner
+        value: "0xFcb19e6a322b27c06842A71e8c725399f049AE3a"
+
+      # The only account allowed to configure minters
+      - type: variable
+        name: "masterMinter() returns (address)"
+        value: "0xE982615d461DD5cD06575BbeA87624fda4e3de17"
+
+      - type: variable
+        name: "paused() returns (bool)"
+        value: false
+
+      # Stale on purpose: the real supply is far above this snapshot
+      - type: variable
+        name: totalSupply
+        value: "25000000000000000" # ~25B USDC (6 decimals)
+        options:
+          tolerance: "10%"
+        metric:
+          name: usdc_supply
+          category: supply
+          severity: medium
+          description: Supply moved more than 10% away from the recorded snapshot

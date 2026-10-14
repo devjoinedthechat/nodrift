@@ -76,14 +76,14 @@ contracts:
       - type: function_call
         function: totalSupply
         args: []
-        value: 40000000000000  # ~40B USDC (6 decimals)
+        value: "40000000000000000"  # ~40B USDC (6 decimals)
         options:
           tolerance: "50%"  # Allow wide variance as supply changes
       
-      # Check Uniswap V2 Router has some USDC balance
+      # A router only passes tokens through; more than 1 USDC of dust means funds are stuck in it
       - type: function_call
         function: balanceOf
         args: ["0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"]
-        value: 1000000  # At least 1 USDC
+        value: 1000000  # 1 USDC
         options:
-          comparison: greater_than
+          comparison: "<="

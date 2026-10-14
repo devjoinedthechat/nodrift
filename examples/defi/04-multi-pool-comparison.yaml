@@ -37,7 +37,7 @@ contracts:
       - type: function_call
         function: totalSupply
         args: []
-        value: "10000000000000000000"  # At least 10 LP tokens
+        value: "1000000000000000"  # 0.001 LP: pairs with a 6-decimal token mint few LP tokens
         options:
           comparison: greater_than
       
@@ -46,15 +46,11 @@ contracts:
         function: token0
         args: []
         value: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-        options:
-          ignore_case: true
       
       - type: function_call
         function: token1
         args: []
         value: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        options:
-          ignore_case: true
   
   # Pool 2: DAI/WETH - Another major pair
   DAI_WETH_Pool:
@@ -93,15 +89,11 @@ contracts:
         function: token0
         args: []
         value: "0x6B175474E89094C44Da98b954EedeAC495271d0F"
-        options:
-          ignore_case: true
       
       - type: function_call
         function: token1
         args: []
         value: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        options:
-          ignore_case: true
   
   # Pool 3: USDT/WETH - Third major pair
   USDT_WETH_Pool:
@@ -131,7 +123,7 @@ contracts:
       - type: function_call
         function: totalSupply
         args: []
-        value: "10000000000000000000"  # At least 10 LP tokens
+        value: "1000000000000000"  # 0.001 LP: pairs with a 6-decimal token mint few LP tokens
         options:
           comparison: greater_than
       
@@ -140,15 +132,11 @@ contracts:
         function: token0
         args: []
         value: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        options:
-          ignore_case: true
       
       - type: function_call
         function: token1
         args: []
         value: "0xdAC17F958D2ee523a2206206994597C13D831ec7"
-        options:
-          ignore_case: true
   
   # Compare USDC balances across all three pools
   USDC_Distribution:

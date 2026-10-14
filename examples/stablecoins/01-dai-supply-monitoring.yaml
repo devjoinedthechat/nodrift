@@ -55,24 +55,22 @@ contracts:
       - type: function_call
         function: totalSupply
         args: []
-        value: "3000000000000000000000000000"  # ~3B DAI
+        value: "4500000000000000000000000000"  # ~4.5B DAI (October 2026)
         options:
           tolerance: "50%"  # Allow wide variance as supply changes with market
       
-      # Check MakerDAO PSM (Peg Stability Module) has significant DAI
-      # PSM helps maintain the peg
+      # The USDC PSM (Peg Stability Module) holds USDC, not DAI: DAI is minted when USDC
+      # comes in. A DAI balance here would mean tokens were sent to it by mistake.
       - type: function_call
         function: balanceOf
         args: ["0x89B78CfA322F6C5dE0aBcEecab66Aee45393cC5A"]  # PSM-USDC-A
-        value: "100000000000000000000000000"  # At least 100M DAI
-        options:
-          comparison: greater_than
+        value: 0
       
       # Check Uniswap V3 DAI/USDC pool has liquidity
       - type: function_call
         function: balanceOf
         args: ["0x5777d92f208679DB4b9778590Fa3CAB3aC9e2168"]  # Uniswap V3 DAI/USDC
-        value: "1000000000000000000000000"  # At least 1M DAI
+        value: "100000000000000000000000"  # At least 100K DAI
         options:
           comparison: greater_than
       

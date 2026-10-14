@@ -49,21 +49,17 @@ contracts:
         function: token0
         args: []
         value: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"  # USDC
-        options:
-          ignore_case: true
       
       - type: function_call
         function: token1
         args: []
         value: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"  # WETH
-        options:
-          ignore_case: true
       
       # Check pool has significant liquidity (LP tokens)
       - type: function_call
         function: totalSupply
         args: []
-        value: "1000000000000000000"  # At least 1 LP token
+        value: "1000000000000000"  # 0.001 LP: pairs with a 6-decimal token mint few LP tokens
         options:
           comparison: greater_than
   

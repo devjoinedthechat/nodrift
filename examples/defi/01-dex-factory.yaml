@@ -31,9 +31,9 @@ contracts:
       - type: function_call
         function: feeTo
         args: []
-        value: "0x0000000000000000000000000000000000000000"
+        value: "0xf38521f130fcCF29dB1961597bc5d2B60F995f85"  # protocol fee recipient, set by Uniswap governance
       
       - type: function_call
         function: feeToSetter
         args: []
-        value: "0x0000000000000000000000000000000000000000"
+        value: "0x1a9C8182C09F50C8318d769245beA52c32BE35BC"  # only the governance timelock may change feeTo

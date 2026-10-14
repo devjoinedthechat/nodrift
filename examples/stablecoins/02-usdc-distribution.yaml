@@ -43,7 +43,7 @@ contracts:
       - type: function_call
         function: totalSupply
         args: []
-        value: "40000000000000"  # ~40B USDC (6 decimals)
+        value: "40000000000000000"  # ~40B USDC (6 decimals)
         options:
           tolerance: "30%"  # USDC supply changes frequently
         metric:

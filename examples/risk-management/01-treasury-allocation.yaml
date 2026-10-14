@@ -36,12 +36,12 @@ contracts:
         options:
           comparison: greater_than
       
-      # Verify treasury holds significant % of total supply
-      # Treasury should have 400M+ UNI (40% of 1B supply)
+      # Snapshot of the treasury balance (about 262M UNI in October 2026).
+      # Governance grants move it; drift here means UNI left or entered the treasury.
       - type: function_call
         function: balanceOf
         args: ["0x1a9C8182C09F50C8318d769245beA52c32BE35BC"]
-        value: "400000000000000000000000000"  # 400M UNI
+        value: "262000000000000000000000000"  # ~262M UNI
         options:
           tolerance: "10%"
   
@@ -79,13 +79,11 @@ contracts:
           - type: uint256
     
     state:
-      # Check treasury WETH balance
+      # The treasury held no WETH when this example was written; any balance is worth a look
       - type: function_call
         function: balanceOf
         args: ["0x1a9C8182C09F50C8318d769245beA52c32BE35BC"]
-        value: "1000000000000000000"  # At least 1 WETH
-        options:
-          comparison: greater_than
+        value: 0
   
   # Monitor DAI holdings (stablecoin diversification)
   DAI_Treasury_Holdings:
@@ -100,10 +98,8 @@ contracts:
           - type: uint256
     
     state:
-      # Check treasury DAI balance
+      # The treasury held no DAI when this example was written; any balance is worth a look
       - type: function_call
         function: balanceOf
         args: ["0x1a9C8182C09F50C8318d769245beA52c32BE35BC"]
-        value: "1000000000000000000"  # At least 1 DAI
-        options:
-          comparison: greater_than
+        value: 0
