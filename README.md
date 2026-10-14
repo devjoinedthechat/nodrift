@@ -162,6 +162,7 @@ nodrift presets             list built-in ABI presets
 | `3` | RPC endpoint unreachable, or on a different chain than configured |
 | `4` | at least one check could not be evaluated (always non-zero) |
 | `5` | config failed validation |
+| `6` | unexpected internal error |
 
 ## In CI
 
@@ -176,14 +177,14 @@ jobs:
   nodrift:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: npx nodrift@latest nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
         env:
           RPC_URL: ${{ secrets.RPC_URL }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: nodrift-report
