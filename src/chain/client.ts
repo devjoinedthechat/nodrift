@@ -31,14 +31,84 @@ const TRANSIENT_NODE_CODES = new Set([
   'UND_ERR_SOCKET',
 ]);
 
+/** HTTP statuses worth retrying: timeouts, rate limits and server-side failures. */
+function retryableStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
 export function isTransient(error: unknown): boolean {
-  if (isError(error, 'NETWORK_ERROR') || isError(error, 'TIMEOUT') || isError(error, 'SERVER_ERROR')) return true;
-  const code = (error as { code?: unknown; cause?: { code?: unknown } })?.code;
+  if (isError(error, 'NETWORK_ERROR') || isError(error, 'TIMEOUT')) return true;
+  if (isError(error, 'SERVER_ERROR')) {
+    const status = error.response?.statusCode;
+    return status === undefined || retryableStatus(status);
+  }
+  const code = (error as { code?: unknown })?.code;
   const causeCode = (error as { cause?: { code?: unknown } })?.cause?.code;
   if (TRANSIENT_NODE_CODES.has(String(code)) || TRANSIENT_NODE_CODES.has(String(causeCode))) return true;
   return /\b(429|502|503|504)\b|rate limit|too many requests|temporarily unavailable|ECONNRESET|ECONNREFUSED|socket hang up/i.test(
     errorMessage(error),
   );
+}
+
+/**
+ * Remove the RPC URL from text. ethers puts the full request URL, which often carries an
+ * API key in its path or query, into the message of every HTTP error. Path segments, query
+ * values and credentials long enough to be keys are removed wherever they appear.
+ */
+export function scrubSecrets(text: string, rpcUrl: string): string {
+  const host = redactUrl(rpcUrl);
+  const urls = new Set([rpcUrl, rpcUrl.replace(/\/+$/, '')]);
+  const fragments = new Set<string>();
+  try {
+    const url = new URL(rpcUrl);
+    urls.add(url.href);
+    urls.add(url.href.replace(/\/+$/, ''));
+    for (const part of [url.username, url.password, ...url.pathname.split('/'), ...url.searchParams.values()]) {
+      const decoded = safeDecode(part);
+      if (decoded.length >= 8) fragments.add(decoded);
+      if (part.length >= 8) fragments.add(part);
+    }
+  } catch {
+    // Not a URL: only the literal string can be removed.
+  }
+  let out = text.replace(/("requestUrl":\s*")[^"]*(")/g, `$1${host}$2`);
+  for (const url of [...urls].sort((a, b) => b.length - a.length)) out = out.split(url).join(host);
+  for (const fragment of [...fragments].sort((a, b) => b.length - a.length))
+    out = out.split(fragment).join('[redacted]');
+  return out;
+}
+
+function safeDecode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
+interface RpcFailure extends Error {
+  code?: unknown;
+  data?: unknown;
+  shortMessage?: unknown;
+  response?: { statusCode?: number };
+  info?: { responseBody?: unknown };
+}
+
+/**
+ * Replace an RPC error with a plain one whose message cannot leak the RPC URL. Only what the
+ * client needs is kept: `code` (retry and revert handling), revert `data` and the HTTP status.
+ * ethers errors are read-only, so they cannot be cleaned in place.
+ */
+export function scrubError(error: unknown, rpcUrl: string): unknown {
+  if (!(error instanceof Error)) return error;
+  const source = error as RpcFailure;
+  const short = typeof source.shortMessage === 'string' ? source.shortMessage : source.message;
+  const body = typeof source.info?.responseBody === 'string' ? source.info.responseBody.trim() : '';
+  const clean: RpcFailure = new Error(scrubSecrets(body ? `${short}: ${body.slice(0, 200)}` : short, rpcUrl));
+  if (source.code !== undefined) clean.code = source.code;
+  if (source.data !== undefined) clean.data = source.data;
+  if (source.response?.statusCode !== undefined) clean.response = { statusCode: source.response.statusCode };
+  return clean;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -54,7 +124,13 @@ export class ChainClient {
     const request = new FetchRequest(settings.rpcUrl);
     request.timeout = settings.timeoutMs;
     const network = Network.from(settings.chainId);
-    this.provider = new JsonRpcProvider(request, network, { staticNetwork: network, batchMaxCount: 1 });
+    // cacheTimeout -1: ethers would otherwise hand a retry the cached failure of the previous attempt.
+    // Identical calls are deduplicated by this client instead.
+    this.provider = new JsonRpcProvider(request, network, {
+      staticNetwork: network,
+      batchMaxCount: 1,
+      cacheTimeout: -1,
+    });
   }
 
   get host(): string {
@@ -151,7 +227,8 @@ export class ChainClient {
       try {
         this.requests++;
         return await operation();
-      } catch (error) {
+      } catch (raw) {
+        const error = scrubError(raw, this.settings.rpcUrl);
         if (attempt >= this.settings.maxRetries || !isTransient(error)) throw error;
         const delay = Math.min(250 * 2 ** attempt, 4000);
         logger.debug(`${what} on ${this.host} failed (${errorMessage(error)}); retrying in ${delay}ms`);
