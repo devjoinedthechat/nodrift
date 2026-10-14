@@ -145,6 +145,12 @@ export function buildProgram(): Command {
       try {
         await runInit(output);
       } catch (error) {
+        // Ctrl+C or closed input while a prompt is open.
+        if (error instanceof Error && error.name === 'ExitPromptError') {
+          process.stderr.write('init cancelled\n');
+          process.exitCode = 130;
+          return;
+        }
         process.exitCode = fail(error);
       }
     });
