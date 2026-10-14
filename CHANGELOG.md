@@ -17,7 +17,9 @@ First public release.
 - Calls are batched through Multicall3 when it is deployed, with automatic fallback to single calls.
 - Inline function signatures (`balanceOf(address) returns (uint256)`), ABI files, Foundry/Hardhat artifacts and presets for ERC-20, ERC-721, ERC-1155, ERC-4626, EIP-2535 diamonds, proxies and AccessControl.
 - Imports, templates, `${VAR}`, `${VAR || default}` and `${file:path[:field]}` substitution.
-- Text, Terraform-style plan, JSON and JUnit reports. Distinct exit codes for drift, check errors, connection, configuration and validation errors.
+- Text, Terraform-style plan, JSON and JUnit reports. Distinct exit codes for drift, check errors, connection, configuration and validation errors; invalid command-line arguments exit with 2.
+- RPC URLs, which often carry API keys, are reduced to their host in every report, log and error message, including errors returned by the endpoint.
+- Only transient RPC failures (timeouts, network errors, HTTP 429 and 5xx) are retried.
 - `nodrift validate` checks configs offline, including ABI lookups and value types.
 - `nodrift init` wizard with optional ABI download from the Etherscan V2 API.
 - JSON Schema (`nodrift.schema.json`) for editor validation and completion, generated from the config schema.
