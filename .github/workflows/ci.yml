@@ -2,35 +2,65 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  lint:
+    name: Lint and type-check
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Build
-        run: npm run build
-      
-      - name: Lint
-        run: npm run lint
-      
-      - name: Type check
-        run: npm run type-check
-      
-      # Uncomment when tests are added
-      # - name: Test
-      #   run: npm test
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+
+  test:
+    name: Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      # anvil runs the end-to-end suite against real contracts
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: npm ci
+      - run: npm run test:coverage
+
+  package:
+    name: Build and smoke-test the package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm pack
+      - name: Install the tarball and run the CLI
+        run: |
+          npm install --global ./nodrift-*.tgz
+          nodrift --version
+          nodrift presets
+          nodrift validate examples/basic/01-erc20-token.yaml --no-env-file
+        env:
+          RPC_URL: https://rpc.example

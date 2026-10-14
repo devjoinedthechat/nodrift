@@ -1,684 +1,233 @@
-# Nodrift
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg">
+    <img alt="nodrift" src=".github/assets/logo-light.svg" width="300">
+  </picture>
+</p>
 
-<div align="center">
+<p align="center">
+  <b>Declare the on-chain state you expect. Get told when it drifts.</b><br>
+  Owners, roles, proxies, parameters and balances of deployed contracts, checked in CI against a YAML file.
+</p>
 
-**Smart Contract State Verification for Ethereum**
+<p align="center">
+  <a href="https://github.com/devjoinedthechat/nodrift/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/devjoinedthechat/nodrift/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <a href="package.json"><img alt="Node.js 22.13+" src="https://img.shields.io/badge/node-%E2%89%A522.13-339933?logo=nodedotjs&logoColor=white"></a>
+  <a href="tsconfig.json"><img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white"></a>
+  <a href="#how-it-works"><img alt="Any EVM chain" src="https://img.shields.io/badge/EVM-any%20chain-627EEA?logo=ethereum&logoColor=white"></a>
+</p>
 
-[![npm version](https://img.shields.io/npm/v/nodrift.svg)](https://www.npmjs.com/package/nodrift)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D16-green.svg)](https://nodejs.org/)
-
-*Verify on-chain contract state matches your YAML configuration. Perfect for CI/CD pipelines, audits, and drift detection.*
-
-[Getting Started](#quick-start) • [Documentation](docs/) • [Examples](examples/)
-
-</div>
-
----
-
-##  What is Nodrift?
-
-Nodrift is an open-source tool for verifying that your deployed smart contracts match their expected configuration. Like infrastructure-as-code tools (Terraform, Pulumi), but for Ethereum smart contracts.
-
-**Key Features:** 
-
--  **Comprehensive State Verification** - Owner, roles, variables, storage slots, proxy patterns, and more
--  **Multi-Network Support** - Verify contracts across Ethereum, Polygon, BSC, Arbitrum, Optimism, and more
--  **Built-in Presets** - ERC20, ERC721, ERC1155, ERC4626, Diamond, Proxy patterns
--  **Flexible Comparisons** - Tolerance, ranges, patterns, case-insensitive, order-insensitive
--  **CI/CD Ready** - JUnit XML output, exit codes, GitHub Actions/GitLab CI templates
--  **Multiple Output Formats** - Text, JSON, JUnit XML, Terraform-style plan
--  **JSON Schema** - Config validation with IDE autocompletion and error messages
--  **RPC Retries** - Exponential backoff and per-call timeouts
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="docs/README.md">Documentation</a> ·
+  <a href="docs/state-types.md">Check types</a> ·
+  <a href="docs/ci-cd-integration.md">CI setup</a> ·
+  <a href="examples/">Examples</a>
+</p>
 
 ---
 
-##  Table of Contents
+Deployed contracts change after deployment: ownership moves, roles get granted, proxies are upgraded, fees and caps are tuned by governance or by a compromised key. **nodrift** reads that state from the chain and compares it with what you wrote down, so a change nobody expected fails a CI job instead of going unnoticed.
 
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [Basic Usage](#basic-usage)
-- [Configuration](#configuration)
-- [State Types](#state-types)
-- [Presets](#presets)
-- [CI/CD Integration](#cicd-integration)
-- [Examples](#examples)
-- [Documentation](#documentation)
-- [Contributing](#contributing)
-- [License](#license)
+```text
+$ nodrift examples/stablecoins/02-usdc-distribution.yaml
+nodrift v0.1.0 · examples/stablecoins/02-usdc-distribution.yaml
+chain 1 via ethereum-rpc.publicnode.com · block 26192645 · multicall
 
----
+USDC  0xA0b8…eB48 · chain 1
+  ✓ symbol()                                               USDC
+  ✗ totalSupply()                                          [MEDIUM] total_supply_drift
+      actual    48173709776725694
+      expected  40000000000000 (± 30%)
+  ✓ balanceOf(0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c)  143495675877762
+  ✓ balanceOf(0xc3d688B66703497DAA19211EEdff47f25384cdc3)  44438669720928
+  ✓ balanceOf(0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640)  60611868272571
+  ✓ balanceOf(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7)  23964233904120
+  ✓ balanceOf(0x55FE002aefF02F77364de339a1292923A15844B8)  48089616948857
+  ✓ balanceOf(0x28C6c06298d514Db089934071355E5743bf21d60)  52017308220
 
-##  Quick Start
-
-### Installation
-
-```bash
-npm install -g nodrift
+8 checks: 7 passed, 1 drifted, 0 errors · 1 contract · 2739 ms
 ```
 
-### Create Your First Config
+## Features
+
+- **One consistent snapshot.** Each network is read at a single pinned block (`latest`, `safe`, `finalized` or a number), after checking that the RPC endpoint is on the chain you configured.
+- **Few requests.** Calls are batched through [Multicall3](https://www.multicall3.com) when it is deployed, and identical calls are made once.
+- **Exact comparisons.** Expected values are typed against the ABI and compared as integers, so a uint256 is never rounded through a float. Tolerances, ranges, operators and regular expressions are available when exact equality is not what you want.
+- **Configs are checked before they run.** Unknown keys, bad address checksums, missing functions and mistyped values are reported with their exact location. `nodrift validate` does this offline.
+- **Failures are never silent.** A check that cannot be read (revert, missing code, unreachable RPC) is an error with its own exit code, not a pass.
+- **Read-only and safe to run on untrusted configs.** No transactions, no command execution from configs, file references confined to the project, and RPC URLs reduced to their host in every report.
+- **Reports for people and machines.** Terminal output, a Terraform-style plan, JSON with exact integers, and JUnit XML for CI test views.
+
+## Quick start
 
 ```bash
-nodrift init
+npm install --save-dev nodrift     # or: npm install --global nodrift
 ```
 
-This interactive wizard will guide you through creating a configuration file.
-
-### Example Configuration
-
-Create a `nodrift.yaml` file:
+Write the state you expect to `nodrift.yaml`:
 
 ```yaml
-version: 1.0
-
+# yaml-language-server: $schema=https://raw.githubusercontent.com/devjoinedthechat/nodrift/main/nodrift.schema.json
 network:
-  rpc_url: "${RPC_URL}"
+  rpc_url: ${RPC_URL}
   chain_id: 1
 
 contracts:
-  MyToken:
-    preset: erc20
-    address: "${TOKEN_ADDRESS}"
+  Vault:
+    address: "${VAULT_ADDRESS}"
+    preset: erc4626
     state:
       - type: owner
-        expected: "${EXPECTED_OWNER}"
-      
-      - type: variable
-        name: totalSupply
-        expected: "1000000000000000000000000"  # 1M tokens
-        options:
-          tolerance: "1%"
-      
+        value: "${MULTISIG}"
+      - type: proxy
+        checks:
+          implementation: "${VAULT_IMPLEMENTATION}"
       - type: role
-        role: MINTER_ROLE
-        account: "${MINTER_ADDRESS}"
-        expected: true
-```
-
-### Run Verification
-
-```bash
-# Create .env file with your RPC URL
-echo "RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY" > .env
-
-# Run verification
-nodrift nodrift.yaml
-
-# CI/CD mode (fail on drift)
-nodrift nodrift.yaml --fail-on-drift
-
-# Terraform-style plan output
-nodrift nodrift.yaml --plan
-
-# JUnit XML output
-nodrift nodrift.yaml --output junit --junit-file results.xml
-
-# JSON output for CI/CD
-nodrift nodrift.yaml --output json
-```
-
----
-
-##  Installation
-
-### NPM (Global)
-
-```bash
-npm install -g nodrift
-```
-
-### NPM (Project)
-
-```bash
-npm install --save-dev nodrift
-```
-
-### From Source
-
-```bash
-git clone https://github.com/your-org/nodrift.git
-cd nodrift
-npm install
-npm run build
-npm link
-```
-
-### Requirements
-
-- Node.js >= 16.0.0
-- npm or yarn
-
----
-
-##  Basic Usage
-
-### Commands
-
-```bash
-# Verify contracts against configuration
-nodrift <config-file>
-
-# Validate configuration without blockchain connection
-nodrift validate <config-file>
-
-# Interactive configuration generator
-nodrift init
-
-# List available presets
-nodrift presets
-```
-
-### Options
-
-```bash
-nodrift <config-file> [options]
-
-Options:
-  -o, --output <format>      Output format: text, json, junit (default: text)
-  --junit-file <path>        JUnit XML output path (default: test-results/nodrift-junit.xml)
-  --fail-on-drift            Exit with code 1 if drift detected (CI/CD mode)
-  --compact-json             Compact JSON output (no indentation)
-  -q, --quiet                Suppress non-essential output
-  -v, --verbose              Enable verbose logging
-  --plan                     Terraform-style plan output
-  -h, --help                 Display help
-  --version                  Display version
-```
-
-### Exit Codes
-
-- `0` - Success (no drift)
-- `1` - Drift detected (only with `--fail-on-drift`)
-- `2` - Configuration error
-- `3` - Network error
-- `4` - Contract error
-- `5` - Validation error
-- `6` - Unknown error
-
----
-
-##  Configuration
-
-### Basic Structure
-
-```yaml
-version: 1.0
-
-# Global network configuration (can be overridden per contract)
-network:
-  rpc_url: "${RPC_URL}"
-  chain_id: 1
-  timeout: 30000        # Optional: RPC timeout in ms
-  max_retries: 3        # Optional: Max retry attempts
-
-# Optional: Import reusable configurations
-imports:
-  - ./configs/networks.yaml
-  - ./configs/templates.yaml
-
-# Contract definitions
-contracts:
-  ContractName:
-    address: "${CONTRACT_ADDRESS}"
-    abi: "./path/to/abi.json"  # Optional if using preset
-    preset: erc20               # Optional: Use built-in preset
-    
-    # Optional: Override network for this contract
-    network:
-      rpc_url: "${POLYGON_RPC_URL}"
-      chain_id: 137
-    
-    # State verification
-    state:
-      - type: owner
-        expected: "${OWNER_ADDRESS}"
-      
+        role: PAUSER_ROLE
+        account: "${GUARDIAN}"
       - type: variable
-        name: paused
-        expected: false
+        name: asset
+        value: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+      - type: variable
+        name: "paused() returns (bool)"
+        value: false
+      - type: function_call
+        function: "withdrawalFee() returns (uint256)"
+        value: 50
+        options:
+          comparison: "<="
+          description: fee in basis points, at most 0.5%
 ```
 
-### Environment Variables
-
-Nodrift supports environment variable substitution using `${VAR_NAME}` syntax:
-
-```yaml
-network:
-  rpc_url: "${RPC_URL}"
-  
-contracts:
-  MyContract:
-    address: "${CONTRACT_ADDRESS}"
-    state:
-      - type: owner
-        expected: "${EXPECTED_OWNER}"
-```
-
-Set variables before running:
+Then run it:
 
 ```bash
-export RPC_URL="https://..."
-export CONTRACT_ADDRESS="0x..."
-export EXPECTED_OWNER="0x..."
+export RPC_URL=https://...           # or put it in a .env file next to the config
+npx nodrift validate nodrift.yaml    # offline: schema, ABI lookups, value types
+npx nodrift nodrift.yaml             # read the chain and compare
 ```
 
-Or use a `.env` file:
+`npx nodrift init` builds a starter config interactively and can fetch verified ABIs from Etherscan.
 
-```bash
-# .env
-RPC_URL=https://...
-CONTRACT_ADDRESS=0x...
-EXPECTED_OWNER=0x...
+Functions can come from a [preset](docs/presets.md), an ABI file (plain ABI or a Foundry/Hardhat artifact), or an inline signature such as `"balanceOf(address) returns (uint256)"`, so most configs need no ABI files at all.
+
+## What you can check
+
+| Type | Checks | Example |
+| --- | --- | --- |
+| `owner` | `owner()` (falls back to `getOwner()`) | `value: "0x…"` |
+| `role` | `hasRole(role, account)`, or the exact member set of an enumerable role | `role: MINTER_ROLE`, `account: "0x…"` |
+| `variable` | a public variable or zero-argument getter | `name: paused`, `value: false` |
+| `function_call` | any view function, with arguments and a selected output | `function: balanceOf`, `args: ["0x…"]` |
+| `storage_slot` | a raw slot or a packed field in it | `slot: 0`, `options: { offset: 20, size: 12 }` |
+| `proxy` | ERC-1967 implementation, admin and beacon slots | `checks: { implementation: "0x…" }` |
+| `array_state` | length, membership, exact contents of an array return value | `checks: { contains: ["0x…"] }` |
+| `mapping_state` | several keys of a mapping getter, including nested mappings | `keys: [{ key: "0x…", value: 1 }]` |
+| `cross_contract` | a function of another contract in the config | `target_contract: Token` |
+| `aggregate` | `sum`, `count`, `average`, `min` or `max` over several reads | `operation: sum` |
+| `comparison` | two reads (or a read and a constant) against each other | `operator: ">="` |
+| `conditional` | different checks depending on a condition | `condition: { name: paused, value: true }` |
+| `time_based` | how old a timestamp is, relative to the pinned block | `max_age_seconds: 3600` |
+
+Values can be compared with `==` (default), `!=`, `>`, `>=`, `<`, `<=`, an absolute or relative `tolerance`, a `range`, or a regular expression `pattern`. Integers can be written as `1000`, `"1_000"`, `"0x3e8"`, `"1e21"`, `"1.5 ether"` or `"30 gwei"`. See [check types](docs/state-types.md) and [comparison options](docs/comparison-options.md).
+
+## Command line
+
+```text
+nodrift [verify] <config>   read on-chain state and compare it with the config
+nodrift validate <config>   check a config offline
+nodrift init [output]       create a config interactively
+nodrift presets             list built-in ABI presets
 ```
 
-```bash
-# Load and run
-export $(cat .env | xargs) && nodrift config.yaml
-```
+| Option | Description |
+| --- | --- |
+| `-o, --output <format>` | `text` (default), `json` or `junit` |
+| `--junit-file <path>` | where `--output junit` writes (default `test-results/nodrift-junit.xml`) |
+| `--fail-on-drift` | exit with code 1 when drift is found |
+| `--plan` | Terraform-style plan of drifted state |
+| `--block <block>` | read at `latest`, `safe`, `finalized` or a block number |
+| `-q, --quiet` | only print drift, errors and the summary |
+| `--compact-json` | single-line JSON |
+| `--no-env-file` | do not load `.env` |
+| `-v, --verbose` | log RPC activity to stderr |
 
-### Advanced Features
+| Exit code | Meaning |
+| --- | --- |
+| `0` | all checks passed (or drift found without `--fail-on-drift`) |
+| `1` | drift found and `--fail-on-drift` set |
+| `2` | config file could not be read or resolved |
+| `3` | RPC endpoint unreachable, or on a different chain than configured |
+| `4` | at least one check could not be evaluated (always non-zero) |
+| `5` | config failed validation |
 
-- **Imports/Includes** - Reuse configurations across files
-- **Templates** - Define reusable contract templates
-- **Multi-Network** - Verify contracts across multiple chains
-- **Custom ABIs** - Use custom ABI files or fetch from Etherscan
-
-See [Configuration Guide](docs/configuration.md) for details.
-
----
-
-##  State Types
-
-Nodrift supports comprehensive state verification:
-
-### Basic Types
-
-- **Owner** - Verify contract ownership
-- **Role** - Verify AccessControl role memberships
-- **Variable** - Read public state variables
-- **Function Call** - Execute view functions
-
-### Advanced Types
-
-- **Storage Slot** - Direct storage slot access
-- **Proxy** - ERC1967 proxy pattern verification
-
-### Complex Types
-
-- **Array State** - Verify array length and membership
-- **Mapping State** - Verify mapping key-value pairs
-- **Cross Contract** - Read values from other contracts
-- **Aggregate** - Aggregate operations (sum, count, average, min, max)
-- **Conditional** - Conditional verification based on other states
-- **Comparison** - Compare two arbitrary values
-- **Time Based** - Timestamp and staleness checks
-
-### Example
+## In CI
 
 ```yaml
-state:
-  # Owner check
-  - type: owner
-    expected: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
-  
-  # Role check
-  - type: role
-    role: MINTER_ROLE
-    account: "0x123..."
-    expected: true
-  
-  # Variable check
-  - type: variable
-    name: totalSupply
-    expected: "1000000000000000000000000"
-  
-  # Function call
-  - type: function_call
-    function: balanceOf
-    args: ["0x123..."]
-    expected: "100000000000000000000"
-  
-  # Storage slot
-  - type: storage_slot
-    slot: "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
-    expected: "0x..."
-  
-  # Array state
-  - type: array_state
-    name: whitelist
-    checks:
-      length: 5
-      contains: ["0x123...", "0x456..."]
-  
-  # Cross-contract check
-  - type: cross_contract
-    target_contract: OtherContract
-    function: getValue
-    args: []
-    expected: "42"
-```
-
-See [State Types Guide](docs/state-types.md) for complete reference.
-
----
-
-##  Presets
-
-Nodrift includes built-in presets for common contract standards:
-
-### Available Presets
-
-- **erc20** - ERC20 token standard
-- **erc721** - ERC721 NFT standard
-- **erc1155** - ERC1155 multi-token standard
-- **erc4626** - ERC4626 tokenized vault standard
-- **diamond** - Diamond pattern (EIP-2535)
-- **proxy** - ERC1967 proxy pattern
-- **accessControl** - OpenZeppelin AccessControl
-
-### Usage
-
-```yaml
-contracts:
-  MyToken:
-    preset: erc20
-    address: "${TOKEN_ADDRESS}"
-    state:
-      # Preset automatically includes ABI and common checks
-      - type: owner
-        expected: "${OWNER}"
-```
-
-### List Presets
-
-```bash
-nodrift presets
-```
-
-See [Presets Guide](docs/presets.md) for details.
-
----
-
-##  Comparison Options
-
-Nodrift supports flexible value comparison:
-
-### Numeric Comparisons
-
-```yaml
-- type: variable
-  name: totalSupply
-  expected: "1000000"
-  options:
-    tolerance: "5%"        # Allow 5% deviation
-    # OR
-    tolerance: "1000"      # Allow absolute deviation of 1000
-    # OR
-    range:
-      min: "900000"
-      max: "1100000"
-```
-
-### String Comparisons
-
-```yaml
-- type: variable
-  name: symbol
-  expected: "TOKEN"
-  options:
-    ignore_case: true      # Case-insensitive comparison
-    # OR
-    pattern: "^TOKEN.*"    # Regex pattern matching
-```
-
-### Array Comparisons
-
-```yaml
-- type: array_state
-  name: whitelist
-  checks:
-    contains: ["0x123...", "0x456..."]
-  options:
-    ignore_order: true     # Order-insensitive comparison
-```
-
-See [Comparison Options Guide](docs/comparison-options.md) for complete reference.
-
----
-
-##  CI/CD Integration
-
-### GitHub Actions
-
-```yaml
-name: Contract Verification
-
-on: [push, pull_request]
+# .github/workflows/drift.yml
+name: Contract drift
+on:
+  schedule: [{ cron: '0 * * * *' }]
+  workflow_dispatch:
 
 jobs:
-  verify:
+  nodrift:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '18'
-      
-      - name: Install Nodrift
-        run: npm install -g nodrift
-      
-      - name: Verify Contracts
+          node-version: 22
+      - run: npx nodrift@latest nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
         env:
           RPC_URL: ${{ secrets.RPC_URL }}
-          CONTRACT_ADDRESS: ${{ secrets.CONTRACT_ADDRESS }}
-        run: |
-          nodrift config.yaml --fail-on-drift --output junit
-      
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
-          files: test-results/nodrift-junit.xml
+          name: nodrift-report
+          path: test-results/
 ```
 
-### GitLab CI
+More setups (GitLab, pull request checks, JSON output for alerting) are in [CI integration](docs/ci-cd-integration.md).
 
-```yaml
-verify-contracts:
-  stage: test
-  image: node:18
-  script:
-    - npm install -g nodrift
-    - nodrift config.yaml --fail-on-drift --output junit
-  artifacts:
-    reports:
-      junit: test-results/nodrift-junit.xml
+## How it works
+
+```mermaid
+flowchart LR
+  A[YAML config] --> B["Load and validate<br/>imports, templates, presets,<br/>ABIs, value types"]
+  B --> C["Connect<br/>check chain id,<br/>pin one block"]
+  C --> D["Read<br/>Multicall3 batches,<br/>deduplicated calls"]
+  D --> E["Compare<br/>typed, exact"]
+  E --> F["Report<br/>text, plan, JSON, JUnit"]
 ```
 
-### Jenkins
+Everything up to "Connect" happens offline, which is what `nodrift validate` runs. Details and design decisions are in [architecture](docs/architecture.md).
 
-```groovy
-pipeline {
-  agent any
-  stages {
-    stage('Verify Contracts') {
-      steps {
-        sh 'npm install -g nodrift'
-        sh 'nodrift config.yaml --fail-on-drift --output junit'
-      }
-    }
-  }
-  post {
-    always {
-      junit 'test-results/nodrift-junit.xml'
-    }
-  }
-}
+## As a library
+
+```ts
+import { loadConfig, renderText, verify } from 'nodrift';
+
+const result = await verify(loadConfig('nodrift.yaml'), { block: 'finalized' });
+console.log(renderText(result));
+if (result.summary.drifted > 0 || result.summary.errors > 0) process.exitCode = 1;
 ```
 
-See [CI/CD Integration Guide](docs/ci-cd-integration.md) for more examples.
+`result.results` holds one entry per check with its status (`pass`, `drift`, `error` or `skipped`), the actual value and the expectation.
 
----
-
-##  Examples
-
-The [`examples/`](examples/) directory contains comprehensive real-world examples:
-
-### Example Categories
-
-- **[Basic Examples](examples/basic/)** - ERC20 token verification fundamentals
-- **[DeFi Examples](examples/defi/)** - DEX, liquidity pools, and oracle monitoring
-- **[Governance Examples](examples/governance/)** - Governance token verification
-- **[Stablecoin Examples](examples/stablecoins/)** - Supply and distribution monitoring
-- **[Risk Management Examples](examples/risk-management/)** - Treasury allocation and liquidity health
-
-### Running Examples
+## Development
 
 ```bash
-# Basic ERC20 token
-nodrift examples/basic/01-erc20-token.yaml
-
-# Complete Uniswap V2 ecosystem
-nodrift examples/defi/03-uniswap-v2-ecosystem.yaml
-
-# USDC distribution monitoring
-nodrift examples/stablecoins/02-usdc-distribution.yaml
-
-# Treasury allocation tracking
-nodrift examples/risk-management/01-treasury-allocation.yaml
+npm ci
+npm test            # unit tests, plus end-to-end tests when Foundry's anvil is installed
+npm run lint && npm run typecheck
+npm run dev -- validate examples/basic/01-erc20-token.yaml
 ```
 
-See [Examples README](examples/README.md) for complete details and all available examples.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout and conventions. Security issues: please follow [SECURITY.md](SECURITY.md).
 
----
+## License
 
-##  Documentation
-
-### Core Documentation
-
-- **[Getting Started](docs/getting-started.md)** - Installation and first steps
-- **[Configuration Guide](docs/configuration.md)** - Complete configuration reference
-- **[State Types](docs/state-types.md)** - All verification types
-- **[Comparison Options](docs/comparison-options.md)** - Flexible value matching
-- **[Presets](docs/presets.md)** - Built-in contract presets
-- **[CI/CD Integration](docs/ci-cd-integration.md)** - Pipeline integration
-- **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
-- **[FAQ](docs/faq.md)** - Frequently asked questions
-
-### Development
-
-- **[Architecture](docs/architecture.md)** - System design and internals
-- **[Contributing](CONTRIBUTING.md)** - Development guide
-
----
-
-##  Use Cases
-
-### Continuous Verification
-
-Verify contract state in CI/CD pipelines after deployments:
-
-```bash
-nodrift config.yaml --fail-on-drift --output junit
-```
-
-### Audit & Compliance
-
-Generate verification reports for audits:
-
-```bash
-nodrift config.yaml --output json > audit-report.json
-```
-
-### Drift Detection
-
-Detect unauthorized changes to contract state:
-
-```bash
-nodrift config.yaml --plan
-```
-
-### Multi-Chain Monitoring
-
-Monitor contracts across multiple networks:
-
-```yaml
-contracts:
-  TokenEthereum:
-    network:
-      chain_id: 1
-    address: "0x..."
-  
-  TokenPolygon:
-    network:
-      chain_id: 137
-    address: "0x..."
-```
-
----
-
-##  Development
-
-### Setup
-
-```bash
-git clone https://github.com/your-org/nodrift.git
-cd nodrift
-npm install
-```
-
-### Build
-
-```bash
-npm run build
-```
-
-### Test
-
-```bash
-npm test
-```
-
-### Lint
-
-```bash
-npm run lint
-npm run format
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
-
----
-
-##  Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-### Ways to Contribute
-
--  Report bugs
--  Suggest features
--  Improve documentation
--  Submit pull requests
--  Star the project
-
----
-
-##  License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-##  Acknowledgments
-
-- Built with [ethers.js](https://docs.ethers.org/)
-- Inspired by infrastructure-as-code tools like Terraform
-
-
-
-
+[MIT](LICENSE)

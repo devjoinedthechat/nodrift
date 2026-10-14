@@ -1,91 +1,55 @@
-# Contributing to Nodrift
+# Contributing to nodrift
 
-Thank you for your interest in contributing to Nodrift! This document provides guidelines and instructions for contributing.
+Thanks for helping. Bug reports, docs fixes and pull requests are all welcome.
 
-## Development Setup
+## Setup
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/your-org/nodrift.git
-   cd nodrift
-   ```
+You need Node.js 22.13 or newer and [Foundry](https://getfoundry.sh) (the end-to-end tests run against a local `anvil` chain).
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+```bash
+git clone https://github.com/devjoinedthechat/nodrift.git
+cd nodrift
+npm ci
+npm test
+```
 
-3. **Build the project**
-   ```bash
-   npm run build
-   ```
+Run the CLI from source with `npm run dev -- <args>`, for example `npm run dev -- validate examples/basic/01-erc20-token.yaml`.
 
-4. **Run tests**
-   ```bash
-   npm test
-   ```
+## Checks
 
-5. **Run linting**
-   ```bash
-   npm run lint
-   ```
+Every pull request must pass these, which is what CI runs:
 
-## Code Style
+| Command | What it does |
+| --- | --- |
+| `npm run lint` | ESLint |
+| `npm run format:check` | Prettier (`npm run format` fixes it) |
+| `npm run typecheck` | TypeScript, strict mode |
+| `npm test` | Unit tests and end-to-end tests against anvil |
 
-- **TypeScript**: Follow the existing code style
-- **Linting**: We use ESLint - run `npm run lint` before committing
-- **Formatting**: We use Prettier - run `npm run format` to format code
-- **Type Safety**: All code must pass TypeScript strict mode checks
+The end-to-end tests are skipped locally when `anvil` is not installed, and required in CI.
 
-## Making Changes
+## Project layout
 
-1. **Create a branch**
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
+```text
+src/config/   load YAML, substitute variables, merge imports/templates/presets, validate, normalize to checks
+src/chain/    RPC client: chain id check, block pinning, retries, Multicall3 batching
+src/check/    typed values, exact comparison, check evaluation
+src/output/   text, plan, JSON and JUnit reports
+src/cli.ts    command-line interface
+tests/unit/   fast tests, no chain needed
+tests/e2e/    tests against anvil with the contracts in tests/fixtures
+```
 
-2. **Make your changes**
-   - Follow existing code patterns
-   - Add comments for complex logic
-   - Update documentation if needed
+## Making changes
 
-3. **Test your changes**
-   ```bash
-   npm run build
-   npm test
-   npm run lint
-   ```
+- Keep pull requests focused. Open an issue first for larger changes or new check types.
+- Add or update tests. Bug fixes should come with a test that fails without the fix.
+- Configs are untrusted input: never add features that execute code or read files outside the project.
+- Never report a check as passing when it could not be evaluated.
+- If you change `src/config/schema.ts`, run `npm run schema` and commit the regenerated `nodrift.schema.json`.
+- If you change the fixture contracts, run `npm run fixtures` (needs `forge`) and commit `tests/fixtures/artifacts.json`.
+- Update the docs and `CHANGELOG.md` for user-facing changes.
 
-4. **Commit your changes**
-   - Write clear commit messages
-   - Follow conventional commit format when possible
+## Releases
 
-5. **Submit a Pull Request**
-   - Describe your changes clearly
-   - Reference any related issues
-   - Ensure all tests pass
-
-## Testing
-
-- Add tests for new features
-- Ensure existing tests still pass
-- Test with real RPC providers when possible
-- Use mock mode for unit tests
-
-## Documentation
-
-- Update README.md for user-facing changes
-- Update inline code comments for complex logic
-- Add examples for new features
-
-## Release Process
-
-Releases are handled by maintainers. Version bumping follows semantic versioning:
-- **Major**: Breaking changes
-- **Minor**: New features (backward compatible)
-- **Patch**: Bug fixes
-
-## Questions?
-
-If you have questions, please open an issue on GitHub.
-
+Maintainers release by bumping the version in `package.json` and `src/version.ts`, updating `CHANGELOG.md`, and pushing a `vX.Y.Z` tag. The release workflow tests, publishes to npm and creates the GitHub release.

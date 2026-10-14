@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest a new check type, option or integration
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to verify?
+      description: Describe the on-chain state and why drift in it matters to you
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed config
+      description: How you would like to write it
+      render: yaml
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you tried

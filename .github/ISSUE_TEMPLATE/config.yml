@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/devjoinedthechat/nodrift/tree/main/docs
+    about: Configuration reference, check types and CI setup
