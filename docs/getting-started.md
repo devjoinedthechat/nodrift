@@ -10,29 +10,31 @@ This guide installs nodrift, writes a first config for the USDC token on Ethereu
 
 ## Install
 
-nodrift is not published to the npm registry yet. Install it from GitHub; npm builds it during installation:
+nodrift needs Node.js 22.13 or newer. It is not published to the npm registry yet; npm fetches it from GitHub and builds it on first use.
+
+Try it without installing:
 
 ```bash
-npm install --global github:devjoinedthechat/nodrift
-nodrift --version
+npx --yes github:devjoinedthechat/nodrift --version
 ```
 
-To pin nodrift per project instead, add it as a dev dependency (the lockfile records the exact commit) and run it with `npx`:
+Add it to a project (the lockfile records the exact commit):
 
 ```bash
 npm install --save-dev github:devjoinedthechat/nodrift
 npx nodrift --version
 ```
 
-To run it from source:
+For a global `nodrift` command, build it from source:
 
 ```bash
 git clone https://github.com/devjoinedthechat/nodrift.git
 cd nodrift
-npm ci
-npm run build
-npm link   # optional: puts the nodrift command on your PATH
+npm ci       # installs dependencies and builds dist/
+npm link     # puts `nodrift` on your PATH
 ```
+
+The rest of this guide writes commands as `nodrift`; use `npx nodrift` inside a project, or `npx --yes github:devjoinedthechat/nodrift` without an install. To pin a version, add a commit: `github:devjoinedthechat/nodrift#<commit>`. `npm install --global github:devjoinedthechat/nodrift` does not work, because npm cannot build a global install from git.
 
 ## Write a config
 

@@ -8,7 +8,7 @@ Configs for contracts on Ethereum mainnet: tokens, Uniswap V2, Chainlink price f
 RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY nodrift examples/basic/01-erc20-token.yaml
 ```
 
-This needs nodrift installed (see [Install](../README.md#install)). In a clone of the repository, `npm ci` builds the CLI and `npx nodrift` runs that build. `RPC_URL` can also come from a `.env` file in the working directory (see [`.env.example`](../.env.example)).
+Commands are written as `nodrift`. In a clone of the repository, `npm ci` builds the CLI and `npx nodrift` runs it; [Install](../README.md#install) lists the other ways. `RPC_URL` can also come from a `.env` file in the working directory (see [`.env.example`](../.env.example)).
 
 To check an example without contacting the chain, validate it:
 

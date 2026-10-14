@@ -64,16 +64,22 @@ USDC  0xA0b8…eB48 · chain 1
 
 ## Install
 
-nodrift needs Node.js 22.13 or newer. It is not published to the npm registry yet; install it from GitHub, which builds it during installation:
+nodrift needs Node.js 22.13 or newer. It is not published to the npm registry yet; npm fetches it from GitHub and builds it on first use.
+
+Try it without installing:
 
 ```bash
-npm install --global github:devjoinedthechat/nodrift
-nodrift --version
+npx --yes github:devjoinedthechat/nodrift --version
 ```
 
-To pin a version, for example in CI, add a commit: `github:devjoinedthechat/nodrift#<commit>`.
+Add it to a project (the lockfile records the exact commit):
 
-Or build it from source:
+```bash
+npm install --save-dev github:devjoinedthechat/nodrift
+npx nodrift --version
+```
+
+For a global `nodrift` command, build it from source:
 
 ```bash
 git clone https://github.com/devjoinedthechat/nodrift.git
@@ -81,6 +87,8 @@ cd nodrift
 npm ci       # installs dependencies and builds dist/
 npm link     # puts `nodrift` on your PATH
 ```
+
+Commands below are written as `nodrift`; use `npx nodrift` inside a project, or `npx --yes github:devjoinedthechat/nodrift` without an install. To pin a version, add a commit: `github:devjoinedthechat/nodrift#<commit>`. `npm install --global github:devjoinedthechat/nodrift` does not work, because npm cannot build a global install from git.
 
 ## Quick start
 
@@ -241,8 +249,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: npm install --global github:devjoinedthechat/nodrift
-      - run: nodrift nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
+      - run: npx --yes github:devjoinedthechat/nodrift nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
         env:
           RPC_URL: ${{ secrets.RPC_URL }}
       - uses: actions/upload-artifact@v7
