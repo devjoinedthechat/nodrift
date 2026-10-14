@@ -1,37 +1,20 @@
-# Nodrift Contract Verification - GitLab CI Template
-# Copy this file to .gitlab-ci.yml
+# nodrift for GitLab CI: checks on-chain state and shows the results as test reports.
+#
+# 1. Add this job to .gitlab-ci.yml and nodrift.yaml to the repository root.
+# 2. Add the RPC endpoint as a masked CI/CD variable named RPC_URL
+#    (Settings > CI/CD > Variables).
+# 3. For periodic drift detection, add a pipeline schedule (Build > Pipeline schedules).
+#
+# Exit codes: 0 in sync, 1 drift, 2 config error, 3 RPC error, 4 check error, 5 invalid config.
 
-stages:
-  - verify
-
-verify-contracts:
-  stage: verify
-  image: node:18
+nodrift:
+  image: node:22
+  stage: test
   script:
-    - npm install -g nodrift
-    - nodrift nodrift.yaml --fail-on-drift --output junit
+    - npx nodrift@latest nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
   artifacts:
-    reports:
-      junit: test-results/nodrift-junit.xml
-    paths:
-      - test-results/
     when: always
-  only:
-    - main
-    - develop
-  variables:
-    RPC_URL: $RPC_URL
-    CONTRACT_ADDRESS: $CONTRACT_ADDRESS
-    EXPECTED_OWNER: $EXPECTED_OWNER
-
-# Optional: Scheduled verification
-verify-contracts-scheduled:
-  extends: verify-contracts
-  only:
-    - schedules
-
-# Required CI/CD Variables (Settings > CI/CD > Variables):
-# - RPC_URL: Your RPC endpoint
-# - CONTRACT_ADDRESS: Contract address to verify
-# - EXPECTED_OWNER: Expected owner address
-# Add more variables as needed for your configuration
+    paths:
+      - test-results/nodrift.xml
+    reports:
+      junit: test-results/nodrift.xml

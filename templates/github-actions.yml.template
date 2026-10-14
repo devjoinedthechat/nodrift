@@ -1,58 +1,46 @@
-# Nodrift Contract Verification - GitHub Actions Template
-# Copy this file to .github/workflows/verify-contracts.yml
+# nodrift for GitHub Actions: checks on-chain state on pushes to main, on pull requests,
+# every 6 hours and on demand.
+#
+# 1. Copy this file to .github/workflows/nodrift.yml and nodrift.yaml to the repository root.
+# 2. Add the RPC endpoint as a repository secret named RPC_URL
+#    (Settings > Secrets and variables > Actions).
+#
+# Pull requests from forks do not receive secrets; nodrift then exits with code 2.
+# Exit codes: 0 in sync, 1 drift, 2 config error, 3 RPC error, 4 check error, 5 invalid config.
 
-name: Contract Verification
+name: nodrift
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
     branches: [main]
+  pull_request:
   schedule:
-    - cron: '0 */6 * * *'  # Run every 6 hours
-  workflow_dispatch:  # Allow manual trigger
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
         with:
-          node-version: '18'
-          cache: 'npm'
-      
-      - name: Install Nodrift
-        run: npm install -g nodrift
-      
-      - name: Verify Contracts
+          node-version: 22
+
+      - name: Check on-chain state
+        run: npx nodrift@latest nodrift.yaml --fail-on-drift --output junit --junit-file test-results/nodrift.xml
         env:
           RPC_URL: ${{ secrets.RPC_URL }}
-          CONTRACT_ADDRESS: ${{ secrets.CONTRACT_ADDRESS }}
-          EXPECTED_OWNER: ${{ secrets.EXPECTED_OWNER }}
-        run: |
-          nodrift nodrift.yaml --fail-on-drift --output junit
-      
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          files: test-results/nodrift-junit.xml
-          check_name: Contract Verification Results
-      
-      - name: Upload Results
-        uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: verification-results
-          path: test-results/
 
-# Required Secrets:
-# - RPC_URL: Your RPC endpoint (e.g., Alchemy, Infura)
-# - CONTRACT_ADDRESS: Contract address to verify
-# - EXPECTED_OWNER: Expected owner address
-# Add more secrets as needed for your configuration
+      # Runs after drift or check errors too. There is no report when the run stopped early
+      # (exit code 2, 3 or 5); the step then only warns.
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nodrift-report
+          path: test-results/nodrift.xml

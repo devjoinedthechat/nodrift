@@ -1,628 +1,165 @@
 # Troubleshooting
 
-Common issues and solutions when using Nodrift.
+The exit code tells you at which stage a run failed:
 
-## Table of Contents
+| Exit code | Stage                                                       | Section                                                   |
+| --------- | ----------------------------------------------------------- | --------------------------------------------------------- |
+| `2`       | Parsing command-line arguments and loading the config files | [Configuration errors](#configuration-errors-exit-code-2) |
+| `5`       | Validating the config against the schema and the ABIs       | [Validation errors](#validation-errors-exit-code-5)       |
+| `3`       | Connecting to the RPC endpoints                             | [Connection errors](#connection-errors-exit-code-3)       |
+| `4`       | Evaluating individual checks                                | [Check errors](#check-errors-exit-code-4)                 |
+| `1`       | Drift found with `--fail-on-drift`                          | [Unexpected drift](#unexpected-drift)                     |
 
-- [Installation Issues](#installation-issues)
-- [Configuration Errors](#configuration-errors)
-- [Network Errors](#network-errors)
-- [Contract Errors](#contract-errors)
-- [Verification Issues](#verification-issues)
-- [Performance Issues](#performance-issues)
-- [CI/CD Issues](#cicd-issues)
+## First steps
 
----
+1. `nodrift validate nodrift.yaml` finds every configuration and validation problem without touching the chain, and lists all of them at once.
+2. `--verbose` logs the pinned block, whether Multicall3 is used, and every retry to stderr.
+3. `--plan` shows only the checks that drifted or failed.
+4. `--output json` shows exact values, messages and the block number of the run; `jq` helps to filter it.
 
-## Installation Issues
+## Configuration errors (exit code 2)
 
-### Cannot find module 'nodrift'
+**`error: unknown option` or another usage message**
+Invalid command-line arguments, such as an unknown option or a malformed `--block`, exit with `2` before the config is read. The usage text printed to stderr names the problem.
 
-**Problem:** Module not found after installation.
+**`Environment variable not set in .../nodrift.yaml: RPC_URL (used at network.rpc_url)`**
+A `${VAR}` reference has no value; the message lists every missing variable and where it is used. Empty variables count as unset. Set the variable, put it in a `.env` file next to the config, or give a default: `${VAR || default}`. In GitHub Actions, check that the secret is mapped into the step's `env` and that the run was not triggered from a fork, which receives no secrets.
 
-**Solution:**
+**`Unsupported substitution ${cmd:...}`**
+Only `${VAR}`, `${VAR || default}`, `${env:VAR}`, `${file:path}` and `${file:path:field}` exist. Configs cannot run commands or evaluate expressions; compute such values before the run and pass them in as variables or files.
 
-```bash
-# Install globally
-npm install -g nodrift
+**`Invalid variable name in ${...}`**
+Variable names consist of letters, digits and underscores. Shell syntax such as `${VAR:-default}` is not supported; write `${VAR || default}`.
 
-# Or use npx
-npx nodrift config.yaml
+**`... is outside the project directory. Only files under ... can be referenced.`**
+`${file:...}`, `abi` paths and `imports` must resolve to a file inside the working directory or inside the directory of the config that references it, after symlinks are followed. Move the file into the project, or run nodrift from a directory that contains it.
 
-# Or install locally and use npm scripts
-npm install --save-dev nodrift
-```
+**`ABI file not found: ${ABI_PATH}`**
+ABI paths are read before variables are substituted, so they cannot contain `${...}`. Write the path literally, relative to the config file.
 
-### Permission denied
+**`ABI file ... must contain an ABI array or an artifact with an "abi" field`**
+The file is neither a plain ABI (a JSON array) nor a build artifact. Point to the artifact JSON that Foundry, Hardhat or Truffle writes, not to a build-info or metadata file.
 
-**Problem:** Permission error during global installation.
+**`Import cycle: a.yaml -> b.yaml -> a.yaml`**
+Two files import each other. Move the shared part into a third file that both import.
 
-**Solution:**
+**`Contract 'Vault' uses unknown template 'vault' (available: ...)`**
+Template names are case-sensitive, and a template must be defined in the config or in one of its imports.
 
-```bash
-# Use sudo (not recommended)
-sudo npm install -g nodrift
+**`Invalid YAML in .../nodrift.yaml (line 12, column 31): ...`**
+Common causes: an unquoted `${...}` inside `[...]` or `{...}`, and an unquoted operator such as `>=`. Quote both: `args: ["${TREASURY_ADDRESS}"]`, `comparison: ">="`.
 
-# Or configure npm to use a different directory
-mkdir ~/.npm-global
-npm config set prefix '~/.npm-global'
-export PATH=~/.npm-global/bin:$PATH
-npm install -g nodrift
-```
+**`A block number override needs a single chain; this config reads from several`**
+`--block <number>` cannot apply one block number to different chains. Use a tag (`latest`, `safe`, `finalized`), or set `block` per network in the config.
 
-### Node version incompatibility
+## Validation errors (exit code 5)
 
-**Problem:** Nodrift requires Node.js >= 16.0.0
+Validation lists every problem with its location, for example `contracts.Token.state[2].value: ...`. Fix them from the top; one mistake can cause several messages.
 
-**Solution:**
+**`unknown key 'expected' (did you mean 'value'?)`**
+The schema is strict. Expected values are always `value`, a variable's function is `name`, and `decode_as`, `tolerance`, `range`, `pattern`, `ignore_case` and `description` belong under `options`. See [State types](state-types.md) for the fields of each type.
 
-```bash
-# Check Node version
-node --version
+**`Unknown top-level key(s) in .../nodrift.yaml: includes (did you mean 'imports'?)`**
+Only `version`, `network`, `imports`, `templates` and `contracts` are allowed at the top level of every file.
 
-# Update Node.js
-# Using nvm
-nvm install 18
-nvm use 18
+**`not a valid address (check the EIP-55 checksum casing, or write it in all lowercase)`**
+A mixed-case address must have a correct EIP-55 checksum. This usually means a typo. Copy the address again from a trusted source, or write it in lowercase.
 
-# Or download from nodejs.org
-```
+**`must be one of owner, role, variable, function_call, ...`**
+The `type` of a check is misspelled or missing.
 
----
+**`function 'x' is not in the ABI of Token. Add an 'abi', use a 'preset', or write a signature like 'x(...) returns (uint256)'`**
+The function is not in the preset or the `abi`. Add it, or write the check with an inline signature.
 
-## Configuration Errors
+**`'x' is overloaded in the ABI of Token; use a full signature`**
+Several functions share the name. Write the signature you mean: `function: "x(address) returns (uint256)"`.
 
-### Invalid YAML syntax
+**`signature 'x()' must declare what it returns`**
+An inline signature needs its return types, as in `"x() returns (uint256)"`. They tell nodrift how to decode the result and how to type `value`.
 
-**Problem:** YAML parsing error.
+**`takes 1 argument(s), got 0`** or **`takes arguments; use a function_call check`**
+`args` must match the function's inputs. `variable` checks only call functions without arguments.
 
-**Error:**
-```
-Error: Invalid YAML syntax at line 5
-```
+**`expected an integer for uint256, got "1.5"`**, **`256 does not fit in uint8`**, **`expected 32 bytes for bytes32, got 1`**
+Expected values are converted to the ABI type and never rounded or truncated. See [How expected values are typed](comparison-options.md#how-expected-values-are-typed).
 
-**Solution:**
+**`missing 'value' (or options.range / options.pattern)`** or **`use only one of value, options.range`**
+Value checks need exactly one way to express the expectation.
 
-```yaml
-#  Bad - incorrect indentation
-contracts:
-MyToken:
-  address: "0x..."
+**`options.tolerance: does not apply to time_based checks`**
+Each check type accepts a fixed set of options; see [Options by check type](comparison-options.md#options-by-check-type).
 
-#  Good - correct indentation
-contracts:
-  MyToken:
-    address: "0x..."
-```
+**`options.comparison: > needs a numeric value, but symbol() is string`**
+`>`, `>=`, `<` and `<=`, `tolerance` and `range` need integer values. Use `pattern` or `ignore_case` for strings.
 
-**Tips:**
-- Use 2 spaces for indentation (not tabs)
-- Validate YAML online: https://www.yamllint.com/
-- Use `nodrift validate config.yaml` to check syntax
+**`network.rpc_url: must be an http(s) URL`**
+Only HTTP and HTTPS endpoints are supported. A variable that resolves to a `wss://` URL, or to anything that is not a URL, also causes this.
 
-### Environment variable not defined
+**`duplicate id 'x'`**
+Ids must be unique within a contract. The keys of checks inside a conditional start with the conditional's key, so their ids only need to be unique within their branch.
 
-**Problem:** Required environment variable is missing.
+**`slot holds more than an address`** is not a validation error but drift; see [Unexpected drift](#unexpected-drift).
 
-**Error:**
-```
-Error: Environment variable RPC_URL is not defined
-```
+## Connection errors (exit code 3)
 
-**Solution:**
+**`Cannot reach RPC endpoint eth-mainnet.g.alchemy.com (chain_id 1): ...`**
+The endpoint could not be reached, or answered `eth_chainId` with an error, even after retries. Check the URL, the API key, and network access from the CI runner. Increase `timeout` or `max_retries` in `network` for slow or rate-limited endpoints.
 
-```bash
-# Set environment variable
-export RPC_URL="https://..."
+**`RPC endpoint ... is on chain 11155111, but the config says chain_id 1`**
+The URL points to another network than the config expects. nodrift stops here on purpose: reading the right addresses on the wrong chain gives meaningless results.
 
-# Or use .env file
-echo 'RPC_URL=https://...' > .env
-export $(cat .env | xargs)
+**`Cannot fetch block 'finalized' from ...`** or **`Block '19000000' was not found on chain 1`**
+The endpoint does not support the block tag, or the block number does not exist yet. Some chains and local development nodes do not support `safe` and `finalized`.
 
-# Or provide inline
-RPC_URL="https://..." nodrift config.yaml
-```
+## Check errors (exit code 4)
 
-### Schema validation error
+A check error means the value could not be read. It is reported as `error`, never as a pass, and makes the run exit with `4` whether or not `--fail-on-drift` is set.
 
-**Problem:** Configuration doesn't match schema.
+**`no contract code at 0x… on chain 1 (block 26192750)`**
+There is no contract at that address at the pinned block. Typical causes: a wrong address, a contract deployed on another chain, or a pinned block from before the deployment. On local development chains, `safe` and `finalized` can resolve to a block before your deployment.
 
-**Error:**
-```
-Error: Invalid configuration: contracts.MyToken.address is required
-```
+**`Token.x() returned no data; does 0x… implement x()?`**
+The address has code, but the call returned nothing. The contract probably does not have this function (a fallback function swallowed the call), or the ABI declares a different signature.
 
-**Solution:**
+**`Token.x() reverted: <reason>`**, **`reverted with NotAllowed(0x…)`**, **`panicked with code 0x11`**
+The function reverted at the pinned block. Custom errors are decoded when they are in the contract's ABI. Some view functions revert by design for certain arguments or states; check the arguments and the contract's access rules.
 
-```yaml
-#  Bad - missing required field
-contracts:
-  MyToken:
-    preset: erc20
+**`returned data that does not decode as (uint256)`**
+The declared return types do not match what the contract returns. Fix the ABI or the inline signature. A preset declares the standard types; for a contract that deviates from the standard, use an inline signature (see [Presets](presets.md#presets-and-your-own-abi)).
 
-#  Good - all required fields
-contracts:
-  MyToken:
-    preset: erc20
-    address: "${TOKEN_ADDRESS}"
-```
+**`Listing role members needs AccessControlEnumerable`**
+The contract does not implement `getRoleMemberCount`. Replace the `members` check with one `account` check per account, using `value: false` for accounts that must not have the role.
 
-### Invalid preset
+**`pattern needs a string value`**
+`pattern` only applies to strings, addresses, bytes and integers.
 
-**Problem:** Unknown preset specified.
+**Errors on many checks at once, such as timeouts**
+A request that still fails after the retries turns the checks that depend on it into errors. Increase `timeout` and `max_retries`, or use a less loaded endpoint. If an endpoint rejects large Multicall3 batches, nodrift falls back to individual calls by itself.
 
-**Error:**
-```
-Error: Unknown preset: erc721a
-```
+## Unexpected drift
 
-**Solution:**
+**The value differs by a factor of 10^6 or 10^18**
+Expected values are raw integers in the token's smallest unit. `"1.5 ether"` means 1.5 × 10^18 and only fits tokens with 18 decimals; for a token with 6 decimals write `"1.5e6"`.
 
-```bash
-# List available presets
-nodrift presets
+**`slot holds more than an address (upper 12 bytes are non-zero)`**
+The slot packs an address together with other data. Read the address part with `options: { offset: 0, size: 20 }` (adjust the offset to the layout), and check the other fields separately. See [storage_slot](state-types.md#storage_slot).
 
-# Use correct preset name
-```
+**Strings that look equal**
+String comparison is exact: case and whitespace count. Use `ignore_case`, or a `pattern` such as `"^USD Coin$"`. Addresses and bytes are normalized, so their case never matters.
 
-```yaml
-#  Correct preset names
-preset: erc20
-preset: erc721
-preset: erc1155
-preset: erc4626
-preset: diamond
-preset: proxy
-preset: accessControl
-```
+**Different results between two runs**
+Each run reads at its own pinned block, and with `latest` that block moves. The report header and the JSON report name the block. Run with `--block <number>` to read at the same block again.
 
----
+**A value that changes with every block**
+Balances, supplies and prices change by design. Check them with `tolerance`, `range` or an operator instead of an exact value. See [Comparison options](comparison-options.md).
 
-## Network Errors
+## CI and output
 
-### Connection timeout
+**No JUnit file after a failed run**
+Reports are written only when the checks ran. With exit codes `2`, `3` and `5` there is no report; the error message is on stderr.
 
-**Problem:** RPC request timeout.
+**Escape codes or no colors in logs**
+Colors are only used when stdout is a terminal. Set `NO_COLOR=1` to turn them off everywhere, or `FORCE_COLOR=1` to turn them on.
 
-**Error:**
-```
-Error: Network timeout after 30000ms
-```
-
-**Solution:**
-
-```yaml
-# Increase timeout
-network:
-  rpc_url: "${RPC_URL}"
-  chain_id: 1
-  timeout: 60000  # 60 seconds
-```
-
-### Rate limit exceeded
-
-**Problem:** Too many requests to RPC provider.
-
-**Error:**
-```
-Error: Rate limit exceeded
-```
-
-**Solution:**
-
-```yaml
-# Increase retry delay
-network:
-  rpc_url: "${RPC_URL}"
-  chain_id: 1
-  max_retries: 5
-  retry_delay: 2000  # 2 seconds
-```
-
-**Or use a different RPC provider:**
-
-```bash
-# Free public RPCs (rate limited)
-export RPC_URL="https://eth-mainnet.public.blastapi.io"
-
-# Paid providers (higher limits)
-export RPC_URL="https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY"
-export RPC_URL="https://mainnet.infura.io/v3/YOUR_KEY"
-```
-
-### Invalid RPC URL
-
-**Problem:** RPC URL is incorrect or unreachable.
-
-**Error:**
-```
-Error: Failed to connect to RPC endpoint
-```
-
-**Solution:**
-
-```bash
-# Test RPC URL
-curl -X POST -H "Content-Type: application/json" \
-  --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
-  $RPC_URL
-
-# Use correct URL format
-export RPC_URL="https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY"
-```
-
-### Chain ID mismatch
-
-**Problem:** Chain ID doesn't match RPC endpoint.
-
-**Error:**
-```
-Error: Chain ID mismatch: expected 1, got 137
-```
-
-**Solution:**
-
-```yaml
-#  Correct chain IDs
-network:
-  rpc_url: "https://eth-mainnet.g.alchemy.com/v2/..."
-  chain_id: 1  # Ethereum
-
-network:
-  rpc_url: "https://polygon-rpc.com"
-  chain_id: 137  # Polygon
-```
-
----
-
-## Contract Errors
-
-### Contract not found
-
-**Problem:** Contract doesn't exist at address.
-
-**Error:**
-```
-Error: Contract not found at address 0x...
-```
-
-**Solution:**
-
-```bash
-# Verify contract address
-# Check on Etherscan/block explorer
-
-# Ensure correct network
-# Mainnet vs Testnet addresses are different
-```
-
-### Invalid ABI
-
-**Problem:** ABI is malformed or incorrect.
-
-**Error:**
-```
-Error: Invalid ABI format
-```
-
-**Solution:**
-
-```yaml
-#  Use preset (includes ABI)
-contracts:
-  MyToken:
-    preset: erc20
-    address: "${ADDRESS}"
-
-#  Or provide valid ABI file
-contracts:
-  MyToken:
-    address: "${ADDRESS}"
-    abi: "./abis/MyToken.json"
-
-#  Or inline ABI
-contracts:
-  MyToken:
-    address: "${ADDRESS}"
-    abi:
-      - "function owner() view returns (address)"
-      - "function totalSupply() view returns (uint256)"
-```
-
-### Function not found
-
-**Problem:** Function doesn't exist in contract.
-
-**Error:**
-```
-Error: Function 'totalSupply' not found in contract
-```
-
-**Solution:**
-
-```yaml
-# Check function name spelling
-- type: function_call
-  function: totalSupply  # Correct
-  # NOT: total_supply, TotalSupply, etc.
-
-# Verify function exists in ABI
-# Check contract on Etherscan
-```
-
-### Execution reverted
-
-**Problem:** Contract function reverted.
-
-**Error:**
-```
-Error: Execution reverted
-```
-
-**Solution:**
-
-```yaml
-# Check function arguments
-- type: function_call
-  function: balanceOf
-  args: ["0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"]  # Valid address
-  # NOT: ["invalid_address"]
-
-# Ensure function is view/pure
-# Nodrift only calls view/pure functions
-```
-
----
-
-## Verification Issues
-
-### False positive drift
-
-**Problem:** Drift detected but values are actually correct.
-
-**Solution:**
-
-```yaml
-# Use tolerance for numeric values
-- type: function_call
-  function: totalSupply
-  value: "1000000"
-  options:
-    tolerance: "1%"  # Allow 1% deviation
-
-# Use case-insensitive for strings
-- type: function_call
-  function: symbol
-  value: "TOKEN"
-  options:
-    ignore_case: true
-
-# Use ignore_order for arrays
-- type: array_state
-  name: whitelist
-  checks:
-    exact: ["0x123...", "0x456..."]
-  options:
-    ignore_order: true
-```
-
-### Unexpected value format
-
-**Problem:** Value format doesn't match expected.
-
-**Solution:**
-
-```yaml
-# For addresses, use checksummed format
-value: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
-# NOT: "0x742d35cc6634c0532925a3b844bc9e7595f0beb"
-
-# For numbers, use string format
-value: "1000000000000000000000"
-# NOT: 1000000000000000000000
-
-# For booleans, use boolean
-value: true
-# NOT: "true"
-```
-
-### Storage slot not found
-
-**Problem:** Storage slot returns zero.
-
-**Error:**
-```
-Warning: Storage slot returns zero value
-```
-
-**Solution:**
-
-```yaml
-# Verify slot address
-# ERC1967 implementation slot:
-slot: "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
-
-# Specify decode type
-options:
-  decode_as: address
-
-# Check if contract uses standard proxy pattern
-```
-
----
-
-## Performance Issues
-
-### Slow verification
-
-**Problem:** Verification takes too long.
-
-**Solution:**
-
-```yaml
-# Reduce timeout
-network:
-  timeout: 15000  # 15 seconds
-
-# Use faster RPC provider
-# Paid providers are usually faster
-
-# Reduce number of checks
-# Only verify critical state
-```
-
-### Memory issues
-
-**Problem:** Out of memory errors.
-
-**Solution:**
-
-```bash
-# Increase Node.js memory limit
-NODE_OPTIONS="--max-old-space-size=4096" nodrift config.yaml
-
-# Reduce concurrent checks
-# Split into multiple config files
-```
-
-### Rate limiting
-
-**Problem:** Hitting RPC rate limits.
-
-**Solution:**
-
-```yaml
-# Increase retry delay
-network:
-  retry_delay: 2000  # 2 seconds between retries
-
-# Use paid RPC provider
-# Higher rate limits
-
-# Split verification across multiple runs
-```
-
----
-
-## CI/CD Issues
-
-### Environment variables not set
-
-**Problem:** CI/CD pipeline can't find environment variables.
-
-**Solution:**
-
-```yaml
-# GitHub Actions - use secrets
-env:
-  RPC_URL: ${{ secrets.RPC_URL }}
-
-# GitLab CI - use variables
-variables:
-  RPC_URL: $RPC_URL
-
-# Jenkins - use credentials
-environment {
-  RPC_URL = credentials('rpc-url')
-}
-```
-
-### JUnit XML not generated
-
-**Problem:** Test results not appearing in CI/CD.
-
-**Solution:**
-
-```bash
-# Ensure output directory exists
-mkdir -p test-results
-
-# Use correct output format
-nodrift config.yaml --output junit --junit-file test-results/results.xml
-
-# Verify file was created
-ls -la test-results/
-```
-
-### Pipeline fails unexpectedly
-
-**Problem:** Pipeline fails even when verification passes.
-
-**Solution:**
-
-```bash
-# Don't use --fail-on-drift for monitoring
-nodrift config.yaml
-
-# Use --fail-on-drift only for deployment gates
-nodrift config.yaml --fail-on-drift
-
-# Check exit code
-echo $?
-```
-
----
-
-## Debug Mode
-
-Enable verbose logging for troubleshooting:
-
-```bash
-# Verbose mode
-nodrift config.yaml --verbose
-
-# Debug environment variables
-nodrift config.yaml --verbose 2>&1 | grep "Environment"
-
-# Validate configuration
-nodrift validate config.yaml --verbose
-```
-
----
-
-## Getting Help
-
-If you're still experiencing issues:
-
-1. **Check Documentation**
-   - [Getting Started](getting-started.md)
-   - [Configuration](configuration.md)
-   - [FAQ](faq.md)
-
-2. **Search Issues**
-   - [GitHub Issues](https://github.com/your-org/nodrift/issues)
-
-3. **Ask for Help**
-   - [GitHub Discussions](https://github.com/your-org/nodrift/discussions)
-   - Email: support@nodrift.dev
-
-4. **Report a Bug**
-   - [Create an Issue](https://github.com/your-org/nodrift/issues/new)
-   - Include:
-     - Nodrift version (`nodrift --version`)
-     - Node.js version (`node --version`)
-     - Configuration file (sanitized)
-     - Error message
-     - Steps to reproduce
-
----
-
-## Common Error Codes
-
-| Code | Error Type | Solution |
-|------|------------|----------|
-| 0 | Success | No action needed |
-| 1 | Drift detected | Review diffs, update config or contracts |
-| 2 | Configuration error | Fix YAML syntax, add missing fields |
-| 3 | Network error | Check RPC URL, increase timeout |
-| 4 | Contract error | Verify address, check ABI |
-| 5 | Validation error | Fix configuration schema |
-| 6 | Unknown error | Enable verbose mode, report bug |
-
----
-
-## Next Steps
-
-- **[FAQ](faq.md)** - Frequently asked questions
-- **[Configuration](configuration.md)** - Configuration reference
-- **[Examples](../examples/)** - Working examples
+**Values from `.env` are not used**
+Variables already set in the environment take precedence over `.env`, and only one `.env` file is loaded: the one next to the config, or else the one in the working directory. `--no-env-file` disables loading.

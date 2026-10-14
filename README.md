@@ -31,23 +31,21 @@
 Deployed contracts change after deployment: ownership moves, roles get granted, proxies are upgraded, fees and caps are tuned by governance or by a compromised key. **nodrift** reads that state from the chain and compares it with what you wrote down, so a change nobody expected fails a CI job instead of going unnoticed.
 
 ```text
-$ nodrift examples/stablecoins/02-usdc-distribution.yaml
-nodrift v0.1.0 · examples/stablecoins/02-usdc-distribution.yaml
-chain 1 via ethereum-rpc.publicnode.com · block 26192645 · multicall
+$ nodrift examples/basic/05-drift-demo.yaml
+nodrift v0.1.0 · examples/basic/05-drift-demo.yaml
+chain 1 via ethereum-rpc.publicnode.com · block 26192883 · multicall
 
 USDC  0xA0b8…eB48 · chain 1
-  ✓ symbol()                                               USDC
-  ✗ totalSupply()                                          [MEDIUM] total_supply_drift
-      actual    48173709776725694
-      expected  40000000000000 (± 30%)
-  ✓ balanceOf(0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c)  143495675877762
-  ✓ balanceOf(0xc3d688B66703497DAA19211EEdff47f25384cdc3)  44438669720928
-  ✓ balanceOf(0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640)  60611868272571
-  ✓ balanceOf(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7)  23964233904120
-  ✓ balanceOf(0x55FE002aefF02F77364de339a1292923A15844B8)  48089616948857
-  ✓ balanceOf(0x28C6c06298d514Db089934071355E5743bf21d60)  52017308220
+  ✓ symbol        USDC
+  ✓ decimals      6
+  ✓ owner()       0xFcb19e6a322b27c06842A71e8c725399f049AE3a
+  ✓ masterMinter  0xE982615d461DD5cD06575BbeA87624fda4e3de17
+  ✓ paused        false
+  ✗ totalSupply   [MEDIUM] usdc_supply
+      actual    48168971338837518
+      expected  25000000000000000 (± 10%)
 
-8 checks: 7 passed, 1 drifted, 0 errors · 1 contract · 2739 ms
+6 checks: 5 passed, 1 drifted, 0 errors · 1 contract · 1903 ms
 ```
 
 ## Features
@@ -158,7 +156,7 @@ nodrift presets             list built-in ABI presets
 | --- | --- |
 | `0` | all checks passed (or drift found without `--fail-on-drift`) |
 | `1` | drift found and `--fail-on-drift` set |
-| `2` | config file could not be read or resolved |
+| `2` | invalid command-line arguments, or the config file could not be read |
 | `3` | RPC endpoint unreachable, or on a different chain than configured |
 | `4` | at least one check could not be evaluated (always non-zero) |
 | `5` | config failed validation |

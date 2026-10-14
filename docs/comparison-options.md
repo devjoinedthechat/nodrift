@@ -1,633 +1,161 @@
-# Comparison Options
+# Comparison options
 
-Flexible value matching and comparison options in Nodrift.
+By default a check passes when the on-chain value equals `value` exactly. The `options` of a check change how the value is matched: with an operator, a tolerance, a range or a pattern. This page also explains how expected values are written, because every expected value is converted to the type the contract returns before anything is compared.
 
-## Table of Contents
+- [How expected values are typed](#how-expected-values-are-typed)
+- [Writing integers](#writing-integers)
+- [Options](#options)
+- [Options by check type](#options-by-check-type)
+- [Operators](#operators)
+- [Tolerance](#tolerance)
+- [Range](#range)
+- [Pattern](#pattern)
+- [ignore_case and ignore_order](#ignore_case-and-ignore_order)
 
-- [Overview](#overview)
-- [Numeric Comparisons](#numeric-comparisons)
-- [String Comparisons](#string-comparisons)
-- [Array Comparisons](#array-comparisons)
-- [Object Comparisons](#object-comparisons)
-- [Common Options](#common-options)
+## How expected values are typed
 
----
+nodrift converts each expected value to the ABI type of the value it is compared with, and refuses values that do not fit. `nodrift validate` reports these mistakes before anything is read from the chain.
 
-## Overview
+| ABI type                                         | Write the expected value as                                                                                         | Compared as                                           |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `uint<N>`, `int<N>`                              | An integer in any of the [integer forms](#writing-integers). It must fit the type: `256` is rejected for a `uint8`. | Exact integers.                                       |
+| `address`                                        | A hex address, EIP-55 checksummed or all lowercase.                                                                 | Checksummed addresses, so letter case never matters.  |
+| `bool`                                           | `true` or `false`.                                                                                                  | Booleans.                                             |
+| `string`                                         | Text. Numbers are taken as their text, so `value: 6` matches `"6"`.                                                 | Exact text, unless `ignore_case` is set.              |
+| `bytes`, `bytes<N>`                              | `0x`-prefixed hex; `bytes<N>` needs exactly N bytes.                                                                | Lowercase hex.                                        |
+| `T[]`, `T[N]`                                    | A list. A fixed-size array needs exactly N items.                                                                   | Item by item, in order, unless `ignore_order` is set. |
+| Tuples, and functions with several return values | A list in output order, or a mapping by output name when every output has a name.                                   | Field by field.                                       |
 
-Nodrift supports flexible value comparison through the `options` field. This allows you to handle expected variations, case sensitivity, ordering, and more.
+The same rules apply to function arguments, mapping keys, condition values and the items of `array_state` checks.
 
-**Basic Syntax:**
+## Writing integers
+
+| Form             | Example                               | Value                     |
+| ---------------- | ------------------------------------- | ------------------------- |
+| Decimal          | `1000` or `"1000"`                    | 1000                      |
+| With underscores | `1_000_000`                           | 1000000                   |
+| Hex              | `"0x3e8"`                             | 1000                      |
+| Scientific       | `"1e21"`, `"1.5e3"`                   | 10^21, 1500               |
+| Units            | `"1.5 ether"`, `"30 gwei"`, `"7 wei"` | 1.5 × 10^18, 3 × 10^10, 7 |
+| Negative         | `-5`                                  | -5, for signed types      |
+
+`ether` means 10^18 and works for any amount with 18 decimals. For tokens with other decimals, the scientific form is clearer: `"250000e6"` is 250,000 tokens with 6 decimals. A value that is not a whole number, such as `1.5`, `"1.25e1"` or `"0.1 wei"`, is rejected instead of rounded. Integers keep their exact value at any size, with or without quotes.
+
+## Options
+
+| Option                        | Description                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `comparison`                  | Operator applied to the actual and the expected value. Default `==`. See [Operators](#operators).                  |
+| `tolerance`                   | Allowed deviation from `value`: absolute (`1000`, `"1 gwei"`) or relative (`"0.5%"`). See [Tolerance](#tolerance). |
+| `range`                       | Inclusive `min` and `max` bounds. Used instead of `value`. See [Range](#range).                                    |
+| `pattern`                     | Regular expression. Used instead of `value`. See [Pattern](#pattern).                                              |
+| `ignore_case`                 | Compare text without regard to case. Also makes `pattern` case-insensitive.                                        |
+| `ignore_order`                | Compare lists without regard to order.                                                                             |
+| `description`                 | Text shown next to the check in reports. Accepted by every check type.                                             |
+| `decode_as`, `offset`, `size` | How a `storage_slot` check decodes the slot. See [storage_slot](state-types.md#storage_slot).                      |
+
+Checks that compare a value (`variable`, `function_call`, `cross_contract`, `mapping_state`, `aggregate` and `storage_slot`) set exactly one of `value`, `options.range` or `options.pattern`.
+
+## Options by check type
+
+| Check type                                                                  | Options besides `description`                                                |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `variable`, `function_call`, `cross_contract`, `mapping_state`, `aggregate` | `comparison`, `tolerance`, `range`, `pattern`, `ignore_case`, `ignore_order` |
+| `storage_slot`                                                              | the same, plus `decode_as`, `offset`, `size`                                 |
+| `array_state`                                                               | `ignore_case`, `ignore_order`                                                |
+| `owner`, `role`, `proxy`, `comparison`, `time_based`, `conditional`         | none                                                                         |
+
+An option that a check type does not use is an error, for example `options.tolerance: does not apply to time_based checks`. A `comparison` check sets its operator in its own `operator` field, and a `conditional` in `condition.operator`.
+
+## Operators
+
+| Operator | Word alias              | Value types |
+| -------- | ----------------------- | ----------- |
+| `==`     | `equals`                | any         |
+| `!=`     | `not_equals`            | any         |
+| `>`      | `greater_than`          | integers    |
+| `>=`     | `greater_than_or_equal` | integers    |
+| `<`      | `less_than`             | integers    |
+| `<=`     | `less_than_or_equal`    | integers    |
+
+The operator reads as `actual <operator> value`:
 
 ```yaml
 - type: variable
   name: totalSupply
-  value: "1000000"
+  value: '1000000 ether'
   options:
-    tolerance: "5%"
-    description: "Total supply with 5% tolerance"
-```
+    comparison: '<='
 
----
-
-## Numeric Comparisons
-
-### Tolerance (Percentage)
-
-Allow percentage-based deviation:
-
-```yaml
-- type: variable
-  name: totalSupply
-  value: "1000000"
-  options:
-    tolerance: "5%"  # Allow 5% deviation
-```
-
-**Accepted Values:**
-- `950000` to `1050000` (5% of 1000000)
-
-### Tolerance (Absolute)
-
-Allow absolute deviation:
-
-```yaml
-- type: variable
-  name: totalSupply
-  value: "1000000"
-  options:
-    tolerance: "10000"  # Allow 10000 deviation
-```
-
-**Accepted Values:**
-- `990000` to `1010000` (10000 from 1000000)
-
-### Range
-
-Specify min/max bounds:
-
-```yaml
-- type: variable
-  name: totalSupply
-  value: "1000000"
-  options:
-    range:
-      min: "900000"
-      max: "1100000"
-```
-
-**Accepted Values:**
-- Any value between `900000` and `1100000` (inclusive)
-
-### Examples
-
-```yaml
-# Percentage tolerance
-- type: variable
-  name: price
-  value: "100000000000000000"  # 0.1 ETH
-  options:
-    tolerance: "2%"
-
-# Absolute tolerance
 - type: function_call
   function: balanceOf
-  args: ["${USER}"]
-  value: "1000000000000000000000"
+  args: ['0x69834F70169dd7E0ecA5AE7c343a47fe9D36cDd4']
+  value: 0
   options:
-    tolerance: "1000000000000000000"  # 1 token
+    comparison: greater_than
+```
 
-# Range
+Quote the symbols in YAML (`">="`, `"!="`): an unquoted `>` or `!` has a special meaning there. The word aliases need no quotes. `>`, `>=`, `<` and `<=` on a non-integer value are rejected when the config is validated. Reports show the expectation with its operator, for example `expected  > 0`.
+
+## Tolerance
+
+`tolerance` lets an integer deviate from `value`:
+
+- Absolute: an integer in any [integer form](#writing-integers), such as `1000`, `"1 gwei"` or `"5e18"`.
+- Relative: a percentage of `value`, such as `"0.5%"` or `"2%"`.
+
+```yaml
 - type: variable
   name: totalSupply
-  value: "1000000"
+  value: '1000000 ether'
   options:
-    range:
-      min: "900000"
-      max: "1100000"
-
-# Minimum only
-- type: variable
-  name: balance
-  value: "1000000"
-  options:
-    range:
-      min: "1000000"
-
-# Maximum only
-- type: variable
-  name: balance
-  value: "1000000"
-  options:
-    range:
-      max: "1000000"
+    tolerance: '0.5%'
 ```
 
----
+The check passes when the difference between the actual value and `value` is at most the tolerance; the bounds are inclusive. Relative tolerances are computed with integer arithmetic, so there is no floating-point rounding even for 256-bit values. `tolerance` needs `value` and an integer type, and works with `==` (pass when within tolerance) and `!=` (pass when outside it). Reports show it as `1000000000000000000000000 (± 0.5%)`.
 
-## String Comparisons
+## Range
 
-### Case Insensitive
-
-Ignore case when comparing strings:
+`range` checks that an integer lies between two bounds. Either bound can be left out, and both are inclusive.
 
 ```yaml
-- type: variable
-  name: symbol
-  value: "MTK"
+- type: function_call
+  function: balanceOf
+  args: ['0x69834F70169dd7E0ecA5AE7c343a47fe9D36cDd4']
   options:
-    ignore_case: true
+    range:
+      min: '100000 ether'
+      max: '250000 ether'
 ```
 
-**Accepted Values:**
-- `MTK`, `mtk`, `Mtk`, `mTk`, etc.
+`range` replaces `value`, needs an integer type, and cannot be combined with an operator other than `==`. Bounds accept every [integer form](#writing-integers). Reports show it as `in [100000000000000000000000, 250000000000000000000000]`, with `-inf` or `+inf` for a missing bound.
 
-### Pattern Matching
+## Pattern
 
-Use regex patterns:
-
-```yaml
-- type: variable
-  name: symbol
-  value: "TOKEN"
-  options:
-    pattern: "^TOKEN.*"  # Starts with "TOKEN"
-```
-
-**Accepted Values:**
-- `TOKEN`, `TOKEN1`, `TOKEN_V2`, etc.
-
-### Trim Whitespace
-
-Trim leading/trailing whitespace:
+`pattern` matches the value against a regular expression (JavaScript syntax).
 
 ```yaml
 - type: variable
   name: name
-  value: "My Token"
   options:
-    trim: true
-```
-
-**Accepted Values:**
-- `My Token`, ` My Token `, `My Token  `, etc.
-
-### Examples
-
-```yaml
-# Case insensitive
-- type: variable
-  name: symbol
-  value: "USDC"
-  options:
+    pattern: '^USD'
     ignore_case: true
-
-# Pattern matching
-- type: variable
-  name: version
-  value: "1.0.0"
-  options:
-    pattern: "^\\d+\\.\\d+\\.\\d+$"  # Semantic versioning
-
-# Combined
-- type: variable
-  name: name
-  value: "My Token"
-  options:
-    ignore_case: true
-    trim: true
 ```
 
----
+The expression is tested against strings as they are, addresses in checksummed form, bytes as lowercase hex and integers as decimal digits. It matches anywhere in the value unless you anchor it with `^` and `$`. `pattern` replaces `value` and cannot be combined with an operator other than `==`. Booleans, lists and tuples cannot be matched against a pattern; `nodrift validate` rejects such a check. Reports show the pattern as `matches /^USD/i`.
 
-## Array Comparisons
+## ignore_case and ignore_order
 
-### Ignore Order
+`ignore_case` compares text without regard to case, inside lists and tuples too. Addresses and bytes are normalized before every comparison, so their letter case never matters and they do not need this option.
 
-Order-insensitive array comparison:
+`ignore_order` compares lists as multisets: the same items, each the same number of times, in any order. For `array_state` it applies to `checks.exact`.
 
 ```yaml
-- type: array_state
-  name: whitelist
-  checks:
-    exact: ["0x123...", "0x456...", "0x789..."]
+- type: function_call
+  function: 'getSupportedAssets() returns (address[])'
+  value:
+    - '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
+    - '0xdAC17F958D2ee523a2206206994597C13D831ec7'
   options:
     ignore_order: true
 ```
-
-**Accepted Values:**
-- `["0x123...", "0x456...", "0x789..."]`
-- `["0x789...", "0x123...", "0x456..."]`
-- Any permutation
-
-### Allow Empty
-
-Allow empty arrays:
-
-```yaml
-- type: array_state
-  name: whitelist
-  checks:
-    length: 0
-  options:
-    allow_empty: true
-```
-
-### Contains (Subset)
-
-Check if array contains specific elements:
-
-```yaml
-- type: array_state
-  name: whitelist
-  checks:
-    contains: ["0x123...", "0x456..."]
-  options:
-    ignore_order: true
-```
-
-**Accepted Values:**
-- Any array containing `0x123...` and `0x456...`
-- Order doesn't matter
-- Can contain additional elements
-
-### Examples
-
-```yaml
-# Ignore order
-- type: array_state
-  name: admins
-  checks:
-    exact: ["${ADMIN_1}", "${ADMIN_2}", "${ADMIN_3}"]
-  options:
-    ignore_order: true
-
-# Allow empty
-- type: array_state
-  name: pendingTransactions
-  checks:
-    length: 0
-  options:
-    allow_empty: true
-
-# Contains subset
-- type: array_state
-  name: whitelist
-  checks:
-    contains: ["${REQUIRED_USER_1}", "${REQUIRED_USER_2}"]
-  options:
-    ignore_order: true
-```
-
----
-
-## Object Comparisons
-
-### Partial Match
-
-Match subset of object properties:
-
-```yaml
-- type: function_call
-  function: getConfig
-  value:
-    owner: "${OWNER}"
-    paused: false
-  options:
-    partial_match: true
-```
-
-**Accepted Values:**
-- Any object containing at least `owner` and `paused` with matching values
-- Can contain additional properties
-
-### Ignore Keys
-
-Ignore specific keys when comparing:
-
-```yaml
-- type: function_call
-  function: getReserves
-  value:
-    reserve0: "1000000"
-    reserve1: "2000000"
-  options:
-    ignore_keys: ["blockTimestampLast"]
-```
-
-### Deep Comparison
-
-Enable deep comparison for nested objects:
-
-```yaml
-- type: function_call
-  function: getConfig
-  value:
-    settings:
-      fee: 300
-      enabled: true
-  options:
-    deep_compare: true
-```
-
-### Examples
-
-```yaml
-# Partial match
-- type: function_call
-  function: getPoolInfo
-  value:
-    totalLiquidity: "1000000"
-    fee: 300
-  options:
-    partial_match: true
-
-# Ignore keys
-- type: function_call
-  function: getReserves
-  value:
-    reserve0: "1000000000000000000000"
-    reserve1: "2000000000000000000000"
-  options:
-    ignore_keys: ["blockTimestampLast", "timestamp"]
-
-# Deep comparison with tolerance
-- type: function_call
-  function: getPoolData
-  value:
-    reserves:
-      token0: "1000000"
-      token1: "2000000"
-    fee: 300
-  options:
-    deep_compare: true
-    tolerance: "1%"
-```
-
----
-
-## Common Options
-
-### Description
-
-Add human-readable description:
-
-```yaml
-- type: variable
-  name: totalSupply
-  value: "1000000"
-  options:
-    description: "Total supply should be 1M tokens"
-```
-
-### Severity
-
-Set check severity:
-
-```yaml
-- type: variable
-  name: paused
-  value: false
-  options:
-    severity: critical  # critical, high, medium, low
-```
-
-**Severity Levels:**
-- `critical` - Critical check (default)
-- `high` - High priority
-- `medium` - Medium priority
-- `low` - Low priority / informational
-
-### Skip
-
-Skip check conditionally:
-
-```yaml
-- type: variable
-  name: testValue
-  value: "123"
-  options:
-    skip: true
-    skip_reason: "Not applicable in production"
-```
-
-### Timeout
-
-Set custom timeout for this check:
-
-```yaml
-- type: function_call
-  function: expensiveOperation
-  value: "result"
-  options:
-    timeout: 60000  # 60 seconds
-```
-
----
-
-## Combining Options
-
-You can combine multiple options:
-
-```yaml
-# Numeric with tolerance and description
-- type: variable
-  name: totalSupply
-  value: "1000000000000000000000000"
-  options:
-    tolerance: "1%"
-    description: "Total supply: 1M tokens with 1% tolerance"
-    severity: critical
-
-# String with case-insensitive and pattern
-- type: variable
-  name: symbol
-  value: "TOKEN"
-  options:
-    ignore_case: true
-    pattern: "^TOKEN.*"
-    description: "Symbol should start with TOKEN (case-insensitive)"
-
-# Array with order-insensitive
-- type: array_state
-  name: whitelist
-  checks:
-    exact: ["${USER_1}", "${USER_2}", "${USER_3}"]
-  options:
-    ignore_order: true
-    description: "Whitelist should contain exactly 3 users"
-
-# Object with partial match and ignored keys
-- type: function_call
-  function: getReserves
-  value:
-    reserve0: "1000000"
-    reserve1: "2000000"
-  options:
-    partial_match: true
-    ignore_keys: ["blockTimestampLast"]
-    tolerance: "5%"
-    description: "Pool reserves with 5% tolerance"
-```
-
----
-
-## Advanced Examples
-
-### Complex Numeric Comparison
-
-```yaml
-- type: function_call
-  function: getTotalValueLocked
-  value: "10000000000000000000000000"  # 10M tokens
-  options:
-    tolerance: "2%"
-    range:
-      min: "9000000000000000000000000"   # 9M minimum
-    description: "TVL should be ~10M with 2% tolerance, minimum 9M"
-    severity: high
-```
-
-### Complex String Comparison
-
-```yaml
-- type: variable
-  name: version
-  value: "1.0.0"
-  options:
-    pattern: "^\\d+\\.\\d+\\.\\d+$"
-    description: "Version must follow semantic versioning"
-    severity: medium
-```
-
-### Complex Array Comparison
-
-```yaml
-- type: array_state
-  name: validators
-  checks:
-    length: 21
-    contains: ["${REQUIRED_VALIDATOR_1}", "${REQUIRED_VALIDATOR_2}"]
-  options:
-    ignore_order: true
-    description: "Must have 21 validators including required ones"
-    severity: critical
-```
-
-### Complex Object Comparison
-
-```yaml
-- type: function_call
-  function: getPoolConfig
-  value:
-    fee: 300
-    tickSpacing: 60
-    maxLiquidityPerTick: "1000000000000000000"
-  options:
-    partial_match: true
-    ignore_keys: ["observationCardinalityNext"]
-    deep_compare: true
-    description: "Pool configuration check"
-```
-
----
-
-## Best Practices
-
-### 1. Use Tolerances for Dynamic Values
-
-```yaml
-#  Good - allows for expected variations
-- type: variable
-  name: totalSupply
-  value: "1000000"
-  options:
-    tolerance: "1%"
-
-#  Bad - too strict for dynamic values
-- type: variable
-  name: totalSupply
-  value: "1000000"
-```
-
-### 2. Add Descriptions
-
-```yaml
-#  Good - clear intent
-- type: variable
-  name: paused
-  value: false
-  options:
-    description: "Contract should not be paused in production"
-
-#  Bad - no context
-- type: variable
-  name: paused
-  value: false
-```
-
-### 3. Use Appropriate Severity
-
-```yaml
-#  Good - critical for security
-- type: owner
-  value: "${MULTISIG}"
-  options:
-    severity: critical
-    description: "Owner must be multisig"
-
-#  Good - low for informational
-- type: variable
-  name: version
-  value: "1.0.0"
-  options:
-    severity: low
-    description: "Version check"
-```
-
-### 4. Combine Options Wisely
-
-```yaml
-#  Good - comprehensive check
-- type: array_state
-  name: whitelist
-  checks:
-    contains: ["${REQUIRED_USER}"]
-  options:
-    ignore_order: true
-    description: "Whitelist must include required user"
-    severity: high
-```
-
----
-
-## Reference
-
-### All Options
-
-| Option | Type | Applies To | Description |
-|--------|------|------------|-------------|
-| `tolerance` | String | Numeric | Percentage or absolute tolerance |
-| `range.min` | String | Numeric | Minimum value |
-| `range.max` | String | Numeric | Maximum value |
-| `ignore_case` | Boolean | String | Case-insensitive comparison |
-| `pattern` | String | String | Regex pattern |
-| `trim` | Boolean | String | Trim whitespace |
-| `ignore_order` | Boolean | Array | Order-insensitive |
-| `allow_empty` | Boolean | Array | Allow empty arrays |
-| `partial_match` | Boolean | Object | Match subset of properties |
-| `ignore_keys` | Array | Object | Ignore specific keys |
-| `deep_compare` | Boolean | Object | Deep comparison |
-| `description` | String | All | Human-readable description |
-| `severity` | String | All | Check severity |
-| `skip` | Boolean | All | Skip check |
-| `skip_reason` | String | All | Reason for skipping |
-| `timeout` | Number | All | Custom timeout (ms) |
-
----
-
-## Next Steps
-
-- **[State Types](state-types.md)** - All verification types
-- **[Presets](presets.md)** - Built-in contract presets
-- **[Examples](../examples/)** - Real-world examples

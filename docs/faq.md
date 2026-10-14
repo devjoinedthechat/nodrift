@@ -1,437 +1,77 @@
-# Frequently Asked Questions (FAQ)
+# FAQ
 
-Common questions about Nodrift.
+- [What does nodrift do, and what not?](#what-does-nodrift-do-and-what-not)
+- [Does nodrift send transactions or need a private key?](#does-nodrift-send-transactions-or-need-a-private-key)
+- [Which chains does it work with?](#which-chains-does-it-work-with)
+- [Do I need ABI files?](#do-i-need-abi-files)
+- [What is the difference between drift and an error?](#what-is-the-difference-between-drift-and-an-error)
+- [How do I check values that change all the time?](#how-do-i-check-values-that-change-all-the-time)
+- [Why must expected values match the ABI type?](#why-must-expected-values-match-the-abi-type)
+- [Why are numbers strings in the JSON report?](#why-are-numbers-strings-in-the-json-report)
+- [Can I read state at an older block?](#can-i-read-state-at-an-older-block)
+- [How many RPC requests does a run make?](#how-many-rpc-requests-does-a-run-make)
+- [Does it work with proxies?](#does-it-work-with-proxies)
+- [Why does validate need my environment variables?](#why-does-validate-need-my-environment-variables)
+- [Is it safe to run a config from someone else?](#is-it-safe-to-run-a-config-from-someone-else)
+- [Can my RPC API key end up in logs or reports?](#can-my-rpc-api-key-end-up-in-logs-or-reports)
+- [Can I use nodrift from code?](#can-i-use-nodrift-from-code)
 
-## General Questions
+## What does nodrift do, and what not?
 
-### What is Nodrift?
+nodrift reads contract state at one pinned block per network, compares it with the expectations in a YAML file, reports every difference and exits with a code that CI can act on. Each run is a single check; for continuous monitoring, schedule it, for example as a [CI job](ci-cd-integration.md). It does not watch events, keep history between runs, or change anything on-chain.
 
-Nodrift is an open-source tool for verifying that deployed smart contracts match their expected configuration. It's like infrastructure-as-code tools (Terraform, Pulumi) but for Ethereum smart contracts.
+## Does nodrift send transactions or need a private key?
 
-### Why use Nodrift?
+No. It uses read-only JSON-RPC methods: `eth_chainId`, `eth_getBlockByNumber`, `eth_call`, `eth_getStorageAt` and `eth_getCode`. It never signs anything, so it needs no keys.
 
-- **Prevent Configuration Drift** - Detect unauthorized changes to contract state
-- **Automate Verification** - Integrate into CI/CD pipelines
-- **Audit & Compliance** - Generate verification reports
-- **Multi-Network Support** - Verify contracts across multiple chains
-- **RPC Retries** - Exponential backoff, timeouts, error handling
+## Which chains does it work with?
 
-### How does Nodrift work?
+Any EVM chain with an HTTP or HTTPS JSON-RPC endpoint. The endpoint's chain id is checked against `chain_id` before anything is read. Multicall3 batching is used where Multicall3 is deployed at its usual address and skipped elsewhere. One config can read from several chains; see [Contracts on several chains](configuration.md#contracts-on-several-chains). WebSocket endpoints are not supported.
 
-1. You define expected contract state in a YAML file
-2. Nodrift reads current state from the blockchain
-3. Nodrift compares current vs expected state
-4. Nodrift reports any differences (drift)
+## Do I need ABI files?
 
-### Is Nodrift free?
+Often not. `owner`, `role`, `storage_slot` and `proxy` checks need no ABI. [Presets](presets.md) cover ERC-20, ERC-721, ERC-1155, ERC-4626, diamonds, proxies and AccessControl. Any other function can be written as an inline signature, such as `"getThreshold() returns (uint256)"`. ABI files and Foundry or Hardhat artifacts are supported when you have them. `nodrift init` can fetch verified ABIs from Etherscan.
 
-Yes, Nodrift is open-source and free to use under the MIT license.
+## What is the difference between drift and an error?
 
----
+Drift means the value was read and differs from the expectation. An error means the value could not be read: the call reverted, returned nothing, returned data that does not match the declared types, or there was no contract at the address. nodrift never treats an error as a pass. Drift fails the run only with `--fail-on-drift` (exit code 1); errors always fail it (exit code 4).
 
-## Installation & Setup
+## How do I check values that change all the time?
 
-### What are the requirements?
+Express the expectation as a bound instead of an exact value: an operator (`comparison: ">="`), a `range`, or a `tolerance` such as `"0.5%"`. For timestamps, use a [`time_based`](state-types.md#time_based) check. For relations between values, such as "the balance covers the recorded reserve", use a [`comparison`](state-types.md#comparison). See [Comparison options](comparison-options.md).
 
-- Node.js >= 16.0.0
-- npm or yarn
-- RPC endpoint for your target blockchain
+## Why must expected values match the ABI type?
 
-### How do I install Nodrift?
+Typing catches mistakes before they turn into silent passes or confusing drift: a misspelled address fails its checksum, `256` does not fit a `uint8`, `1.5` is not an integer. Integers are compared exactly, at full 256-bit precision, and nothing is rounded. See [How expected values are typed](comparison-options.md#how-expected-values-are-typed).
 
-```bash
-# Global installation
-npm install -g nodrift
+## Why are numbers strings in the JSON report?
 
-# Project installation
-npm install --save-dev nodrift
-```
+JSON numbers lose precision above 2^53 in most JSON parsers, which is far below the range of `uint256`. Writing integers as decimal strings keeps them exact.
 
-### Do I need to provide an ABI?
+## Can I read state at an older block?
 
-Not if you use presets. Presets include ABIs for common standards (ERC20, ERC721, etc.).
+Yes. Set `block` in the network section, or pass `--block <number>`. Every check of that network reads at that block, and `time_based` checks measure age as of that block. The endpoint must still serve the state of that block; for older blocks that usually means an archive node.
 
-```yaml
-# No ABI needed with preset
-contracts:
-  MyToken:
-    preset: erc20
-    address: "${ADDRESS}"
-    state:
-      - type: function_call
-        function: symbol
-        value: "MTK"
-```
+## How many RPC requests does a run make?
 
-### Can I use Nodrift without a paid RPC provider?
+It depends on the config. Calls made at the same time are batched into Multicall3 `aggregate3` requests, identical calls are made once, and the code at each contract address is checked once. Storage reads use one request each. The JSON report lists the number of requests per network in `networks[].requests`.
 
-Yes, you can use free public RPCs, but they have rate limits. For production use, we recommend paid providers like Alchemy or Infura.
+## Does it work with proxies?
 
----
+Yes. Calls to a proxy address run the implementation's code against the proxy's storage, so `variable` and `function_call` checks see the state your users see. The [`proxy`](state-types.md#proxy) check reads the ERC-1967 implementation, admin and beacon slots, and [`storage_slot`](state-types.md#storage_slot) reads any other slot.
 
-## Configuration
+## Why does validate need my environment variables?
 
-### What file format does Nodrift use?
+Variables are substituted before validation, because expected values and arguments are typed after substitution. `validate` does not connect to the chain, so placeholder values of the right shape are enough; see [Validating configs in pull requests](ci-cd-integration.md#validating-configs-in-pull-requests).
 
-YAML. It's human-readable and supports comments.
+## Is it safe to run a config from someone else?
 
-### Can I use environment variables?
+A config cannot run commands or evaluate expressions, and it can only read files inside the working directory or its own directory. Treat it like code anyway: a config decides which RPC endpoints nodrift contacts, and it can place the environment variables and project files it references into the requests it sends, for example into the RPC URL. Review configs from outside sources before running them with your environment.
 
-Yes, use `${VAR_NAME}` syntax:
+## Can my RPC API key end up in logs or reports?
 
-```yaml
-network:
-  rpc_url: "${RPC_URL}"
-contracts:
-  MyContract:
-    address: "${CONTRACT_ADDRESS}"
-```
+Not through nodrift's own output. The report header (`chain 1 via eth-mainnet.g.alchemy.com`), the JSON `networks[].host` field and all messages contain only the host of the RPC URL. Errors from the endpoint, such as `401` for a wrong key or `500`, are scrubbed before nodrift logs or reports them: the URL is replaced by its host, and path segments, query values and credentials long enough to be keys are removed. Values you reference with `${VAR}` in a config are a different matter: an expected value appears in reports like any other, so do not reference secrets there.
 
-### Can I split configuration across multiple files?
+## Can I use nodrift from code?
 
-Yes, use imports:
-
-```yaml
-imports:
-  - ./configs/networks.yaml
-  - ./configs/contracts.yaml
-```
-
-### How do I verify contracts on multiple networks?
-
-Override network settings per contract:
-
-```yaml
-contracts:
-  EthereumToken:
-    address: "${ETH_ADDRESS}"
-    network:
-      rpc_url: "${ETH_RPC_URL}"
-      chain_id: 1
-  
-  PolygonToken:
-    address: "${POLYGON_ADDRESS}"
-    network:
-      rpc_url: "${POLYGON_RPC_URL}"
-      chain_id: 137
-```
-
----
-
-## Verification
-
-### What can Nodrift verify?
-
-- Contract ownership
-- Role memberships (AccessControl)
-- State variables
-- Function return values
-- Storage slots
-- Proxy implementations
-- Array/mapping state
-- Cross-contract values
-- And more...
-
-See [State Types](state-types.md) for complete list.
-
-### How do I handle expected variations?
-
-Use comparison options:
-
-```yaml
-# Numeric tolerance
-- type: function_call
-  function: totalSupply
-  value: "1000000"
-  options:
-    tolerance: "5%"
-
-# Case-insensitive strings
-- type: function_call
-  function: symbol
-  value: "TOKEN"
-  options:
-    ignore_case: true
-
-# Order-insensitive arrays
-- type: array_state
-  name: whitelist
-  checks:
-    exact: ["0x123...", "0x456..."]
-  options:
-    ignore_order: true
-```
-
-### Can I verify proxy contracts?
-
-Yes, use the `proxy` preset or `storage_slot` type:
-
-```yaml
-contracts:
-  MyProxy:
-    preset: proxy
-    address: "${PROXY_ADDRESS}"
-    state:
-      - type: proxy
-        value:
-          implementation: "${IMPLEMENTATION_ADDRESS}"
-          admin: "${ADMIN_ADDRESS}"
-```
-
-### Can I verify contracts without deploying?
-
-No, Nodrift verifies deployed contracts by reading on-chain state. For pre-deployment verification, use other tools like Slither or Mythril.
-
----
-
-## CI/CD Integration
-
-### Which CI/CD platforms are supported?
-
-All major platforms:
-- GitHub Actions
-- GitLab CI
-- Jenkins
-- CircleCI
-- Azure Pipelines
-- And more...
-
-See [CI/CD Integration](ci-cd-integration.md) for examples.
-
-### How do I fail the pipeline on drift?
-
-Use the `--fail-on-drift` flag:
-
-```bash
-nodrift config.yaml --fail-on-drift
-```
-
-This exits with code 1 if drift is detected.
-
-### How do I generate test reports?
-
-Use JUnit XML output:
-
-```bash
-nodrift config.yaml --output junit --junit-file results.xml
-```
-
-Most CI/CD platforms can parse JUnit XML for test reporting.
-
-### Can I run verification on a schedule?
-
-Yes, configure scheduled runs in your CI/CD platform:
-
-```yaml
-# GitHub Actions
-on:
-  schedule:
-    - cron: '0 */6 * * *'  # Every 6 hours
-```
-
----
-
-## Performance
-
-### How fast is Nodrift?
-
-Depends on:
-- Number of checks
-- RPC provider speed
-- Network latency
-- Contract complexity
-
-Typical verification: 2-10 seconds for 10-20 checks.
-
-### Can I speed up verification?
-
-Yes:
-- Use faster RPC provider
-- Reduce timeout
-- Minimize number of checks
-- Use parallel execution for multiple networks
-
-### Does Nodrift cache results?
-
-No, Nodrift always reads fresh state from the blockchain. This ensures accuracy.
-
----
-
-## Troubleshooting
-
-### Why am I getting "Network timeout"?
-
-Increase timeout in configuration:
-
-```yaml
-network:
-  timeout: 60000  # 60 seconds
-```
-
-Or use a faster RPC provider.
-
-### Why am I getting "Rate limit exceeded"?
-
-You're hitting RPC rate limits. Solutions:
-- Use paid RPC provider
-- Increase retry delay
-- Reduce number of checks
-
-### Why is drift detected when values look correct?
-
-Check value format:
-- Addresses should be checksummed
-- Numbers should be strings
-- Use comparison options (tolerance, ignore_case, etc.)
-
-See [Troubleshooting](troubleshooting.md) for more solutions.
-
----
-
-## Security
-
-### Is it safe to use Nodrift?
-
-Yes, Nodrift only reads blockchain state. It never:
-- Sends transactions
-- Requires private keys
-- Modifies contract state
-- Stores sensitive data
-
-### Should I commit my configuration file?
-
-Yes, but use environment variables for sensitive values:
-
-```yaml
-#  Safe to commit
-network:
-  rpc_url: "${RPC_URL}"  # Environment variable
-
-#  Don't commit
-network:
-  rpc_url: "https://eth-mainnet.g.alchemy.com/v2/secret_key"
-```
-
-### Can Nodrift access my private keys?
-
-No, Nodrift doesn't need or use private keys. It only reads public blockchain state.
-
----
-
-## Advanced Usage
-
-### Can I use Nodrift programmatically?
-
-Yes, Nodrift provides a Node.js API:
-
-```typescript
-import { Nodrift, loadConfig } from 'nodrift';
-
-const config = await loadConfig('./config.yaml');
-const nodrift = new Nodrift(config);
-const result = await nodrift.run();
-```
-
-See [API Reference](api-reference.md) for details.
-
-### Can I create custom presets?
-
-Yes, define custom presets in your configuration:
-
-```yaml
-presets:
-  MyCustomPreset:
-    abi:
-      - "function owner() view returns (address)"
-
-contracts:
-  MyContract:
-    preset: MyCustomPreset
-    address: "${ADDRESS}"
-    state:
-      - type: owner
-        value: "${OWNER}"
-```
-
-### Can I verify contracts on testnets?
-
-Yes, just use the testnet RPC URL and chain ID:
-
-```yaml
-network:
-  rpc_url: "${GOERLI_RPC_URL}"
-  chain_id: 5  # Goerli
-```
-
-### Can I verify contracts on L2s?
-
-Yes, Nodrift supports all EVM-compatible chains:
-- Polygon
-- Arbitrum
-- Optimism
-- BSC
-- Avalanche
-- And more...
-
----
-
-## Comparison with Other Tools
-
-### Nodrift vs Hardhat Verify
-
-- **Hardhat Verify**: Verifies source code on Etherscan
-- **Nodrift**: Verifies on-chain state matches configuration
-
-They serve different purposes and can be used together.
-
-### Nodrift vs Tenderly
-
-- **Tenderly**: Monitoring, debugging, and alerting platform
-- **Nodrift**: Configuration verification tool
-
-Tenderly is broader; Nodrift is focused on configuration drift detection.
-
-### Nodrift vs Slither
-
-- **Slither**: Static analysis for security vulnerabilities
-- **Nodrift**: Runtime state verification
-
-Slither analyzes code; Nodrift verifies deployed state.
-
----
-
-## Contributing
-
-### How can I contribute?
-
-- Report bugs
-- Suggest features
-- Improve documentation
-- Submit pull requests
-
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
-
-### How do I report a bug?
-
-[Create an issue](https://github.com/your-org/nodrift/issues/new) with:
-- Nodrift version
-- Node.js version
-- Configuration file (sanitized)
-- Error message
-- Steps to reproduce
-
-### Can I request a feature?
-
-Yes! [Open a discussion](https://github.com/your-org/nodrift/discussions) or create a feature request issue.
-
----
-
-## License
-
-### What license does Nodrift use?
-
-MIT License - free for commercial and personal use.
-
-### Can I use Nodrift in commercial projects?
-
-Yes, the MIT license allows commercial use.
+Yes. The package exports the loader, the verifier and the report renderers. See [Using nodrift as a library](architecture.md#using-nodrift-as-a-library).
