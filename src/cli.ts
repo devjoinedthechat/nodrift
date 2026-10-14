@@ -4,7 +4,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { style } from './common/style';
-import { Command, InvalidArgumentError, Option } from 'commander';
+import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { errorMessage, NodriftError } from './common/errors';
 import { ExitCode, exitCodeForError, exitCodeForResult } from './common/exit-codes';
 import { logger, setLogLevel } from './common/logger';
@@ -108,7 +108,9 @@ export function buildProgram(): Command {
     .name('nodrift')
     .description('Verify that deployed smart contract state matches a YAML config.')
     .version(VERSION)
-    .showHelpAfterError();
+    .showHelpAfterError()
+    // Throw instead of exiting so usage errors get exit code 2 rather than 1 (drift).
+    .exitOverride();
 
   program
     .command('verify', { isDefault: true })
@@ -171,6 +173,10 @@ if (require.main === module) {
   buildProgram()
     .parseAsync()
     .catch((error: unknown) => {
+      if (error instanceof CommanderError) {
+        process.exitCode = error.exitCode === 0 ? ExitCode.SUCCESS : ExitCode.CONFIGURATION_ERROR;
+        return;
+      }
       process.exitCode = fail(error, true);
     });
 }

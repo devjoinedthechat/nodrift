@@ -1,0 +1,5 @@
+dist/
+coverage/
+package-lock.json
+nodrift.schema.json
+tests/fixtures/artifacts.json

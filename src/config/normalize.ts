@@ -473,16 +473,14 @@ class Normalizer {
         const at = `${where}.condition`;
         const target = condition.contract ? this.contracts.get(condition.contract) : info;
         if (!target) fail(`${at}.contract`, `unknown contract '${condition.contract}'`);
-        const ref = condition.function ?? condition.name;
-        if (ref === undefined) fail(at, "set 'function' or 'name'");
-        const call = this.call(
-          target,
-          ref,
-          condition.args ?? [],
-          condition.field,
-          at,
-          condition.function === undefined,
-        );
+        const kind =
+          condition.type ??
+          (condition.function !== undefined ? 'function_call' : condition.name !== undefined ? 'variable' : undefined);
+        if (kind === undefined) fail(at, "set 'function' or 'name'");
+        const ref = kind === 'variable' ? condition.name : condition.function;
+        if (ref === undefined)
+          fail(at, kind === 'variable' ? "type 'variable' needs 'name'" : "type 'function_call' needs 'function'");
+        const call = this.call(target, ref, condition.args ?? [], condition.field, at, kind === 'variable');
         const operator = normalizeOperator(condition.operator ?? '==');
         const conditionExpect = this.expectation(condition.value, { comparison: operator }, call, at);
         const label = `if ${call.label} ${operator} ${formatTyped(conditionExpect.expected)}`;
@@ -639,6 +637,13 @@ class Normalizer {
       expect.range = { min: bound(o.range.min, 'min'), max: bound(o.range.max, 'max') };
     }
     if (o.pattern !== undefined) {
+      const base = target.outType.baseType;
+      if (!(numeric || base === 'string' || base === 'address' || base.startsWith('bytes'))) {
+        fail(
+          `${where}.options.pattern`,
+          `needs a string, address, bytes or integer value, but ${target.label} is ${target.outType.format()}`,
+        );
+      }
       try {
         expect.pattern = new RegExp(o.pattern, o.ignore_case ? 'i' : '');
       } catch (error) {

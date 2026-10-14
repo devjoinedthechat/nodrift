@@ -8,7 +8,7 @@ export enum ExitCode {
   SUCCESS = 0,
   /** Drift detected and --fail-on-drift was set. */
   DRIFT = 1,
-  /** The config file could not be read or resolved. */
+  /** Invalid command-line arguments, or the config file could not be read or resolved. */
   CONFIGURATION_ERROR = 2,
   /** An RPC endpoint was unreachable or on the wrong chain. */
   CONNECTION_ERROR = 3,

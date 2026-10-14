@@ -142,13 +142,14 @@ function applyTemplatesAndPresets(config: Json): void {
       contract = {
         ...template,
         ...contract,
-        abi: mergeAbi(template.abi, contract.abi),
+        abi: mergeAbi(contract.abi, template.abi),
         state: mergeState(template.state, contract.state),
       };
     }
     const preset = contract.preset;
     if (typeof preset === 'string' && (PRESET_NAMES as readonly string[]).includes(preset)) {
-      contract = { ...contract, abi: mergeAbi(PRESETS[preset as keyof typeof PRESETS].abi, contract.abi) };
+      // The contract's own ABI comes first so it wins over preset entries with the same signature.
+      contract = { ...contract, abi: mergeAbi(contract.abi, PRESETS[preset as keyof typeof PRESETS].abi) };
     }
     for (const key of Object.keys(contract)) {
       if (contract[key] === undefined) delete contract[key];

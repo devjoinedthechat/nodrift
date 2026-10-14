@@ -32,7 +32,7 @@ export function resolveConfinedPath(ref: string, baseDir: string, roots: readonl
   if (!realRoots.some((root) => isInside(real, root))) {
     throw new ConfigurationError(
       `${what} ${ref} is outside the project directory. ` +
-        `Only files under ${realRoots.join(' or ')} can be referenced.`,
+        `Only files under ${[...new Set(realRoots)].join(' or ')} can be referenced.`,
     );
   }
   return real;

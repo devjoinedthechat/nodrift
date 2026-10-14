@@ -155,6 +155,39 @@ describe('imports, templates and presets', () => {
   });
 });
 
+describe('ABI precedence', () => {
+  it('lets the contract ABI override preset entries with the same signature', () => {
+    const word = `0x${'ab'.repeat(32)}`;
+    const config = load(
+      contract(
+        `- { type: variable, name: symbol, value: "${word}" }`,
+        '    preset: erc20\n    abi: ["function symbol() view returns (bytes32)"]\n',
+      ),
+    );
+    expect(config.checks[0]).toMatchObject({ expect: { expected: word } });
+  });
+});
+
+describe('conditions and patterns', () => {
+  it('requires condition.type to match name or function', () => {
+    expect(
+      issues(() =>
+        load(
+          contract(
+            `- type: conditional\n  condition: { type: variable, function: "paused() returns (bool)", value: true }\n  then:\n    - { type: owner, value: "${OTHER}" }`,
+          ),
+        ),
+      ),
+    ).toMatch(/type 'variable' needs 'name'/);
+  });
+
+  it('rejects patterns on values without a text form', () => {
+    expect(
+      issues(() => load(contract('- { type: variable, name: "paused() returns (bool)", options: { pattern: "^t" } }'))),
+    ).toMatch(/options\.pattern: needs a string, address, bytes or integer value/);
+  });
+});
+
 describe('validation messages', () => {
   it('points at unknown keys with suggestions', () => {
     const error = issues(() => load(contract(`- { type: owner, expected: "${OTHER}" }`)));
