@@ -19,7 +19,7 @@ Complete reference for Nodrift configuration files.
 
 ## Schema Support
 
-Nodrift provides a production-grade JSON Schema for IDE support. Add this to the top of your YAML files:
+Nodrift ships a JSON Schema for IDE support. Add this to the top of your YAML files:
 
 ```yaml
 # yaml-language-server: $schema=./nodrift.schema.json

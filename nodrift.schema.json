@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://nodrift.dev/schema/v1",
   "title": "Nodrift Configuration Schema",
-  "description": "Production-grade schema for Nodrift smart contract state verification configuration",
+  "description": "JSON Schema for Nodrift smart contract state verification configuration",
   "type": "object",
   "required": ["network", "contracts"],
   "additionalProperties": false,

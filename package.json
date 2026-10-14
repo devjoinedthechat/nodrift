@@ -1,7 +1,7 @@
 {
   "name": "nodrift",
   "version": "2.0.0",
-  "description": "Smart Contract State Verification (Enterprise Edition) - Monitor and verify Ethereum smart contract state with plugins, events, and advanced architecture. Perfect for CI/CD, audits, and drift detection.",
+  "description": "Verify that on-chain Ethereum smart contract state matches a YAML configuration. Built for CI/CD, audits, and drift detection.",
   "keywords": [
     "ethereum",
     "smart-contracts",

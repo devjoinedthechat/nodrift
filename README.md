@@ -19,7 +19,7 @@
 
 ##  What is Nodrift?
 
-Nodrift is a production-grade tool for verifying that your deployed smart contracts match their expected configuration. Like infrastructure-as-code tools (Terraform, Pulumi), but for Ethereum smart contracts.
+Nodrift is an open-source tool for verifying that your deployed smart contracts match their expected configuration. Like infrastructure-as-code tools (Terraform, Pulumi), but for Ethereum smart contracts.
 
 **Key Features:** 
 
@@ -29,8 +29,8 @@ Nodrift is a production-grade tool for verifying that your deployed smart contra
 -  **Flexible Comparisons** - Tolerance, ranges, patterns, case-insensitive, order-insensitive
 -  **CI/CD Ready** - JUnit XML output, exit codes, GitHub Actions/GitLab CI templates
 -  **Multiple Output Formats** - Text, JSON, JUnit XML, Terraform-style plan
--  **Production-Grade Schema** - Full JSON Schema validation with IDE support and error messages
--  **Production-Grade Runtime** - Retry logic, rate limiting, connection pooling, error handling
+-  **JSON Schema** - Config validation with IDE autocompletion and error messages
+-  **RPC Retries** - Exponential backoff and per-call timeouts
 
 ---
 

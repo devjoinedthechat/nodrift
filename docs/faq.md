@@ -6,7 +6,7 @@ Common questions about Nodrift.
 
 ### What is Nodrift?
 
-Nodrift is a production-grade tool for verifying that deployed smart contracts match their expected configuration. It's like infrastructure-as-code tools (Terraform, Pulumi) but for Ethereum smart contracts.
+Nodrift is an open-source tool for verifying that deployed smart contracts match their expected configuration. It's like infrastructure-as-code tools (Terraform, Pulumi) but for Ethereum smart contracts.
 
 ### Why use Nodrift?
 
@@ -14,7 +14,7 @@ Nodrift is a production-grade tool for verifying that deployed smart contracts m
 - **Automate Verification** - Integrate into CI/CD pipelines
 - **Audit & Compliance** - Generate verification reports
 - **Multi-Network Support** - Verify contracts across multiple chains
-- **Production-Grade** - Retry logic, rate limiting, error handling
+- **RPC Retries** - Exponential backoff, timeouts, error handling
 
 ### How does Nodrift work?
 

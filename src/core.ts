@@ -1,4 +1,4 @@
-/** Enhanced core orchestration with enterprise architecture patterns. */
+/** Core orchestration: reads on-chain state and reconciles it against the config. */
 
 import { loadSchema, type NodriftConfig, type NetworkConfig, type ContractConfig } from './config/schema';
 import { ChainReader, type CurrentState } from './chain-reader/index';
@@ -43,7 +43,7 @@ export interface VerificationResult {
 }
 
 /**
- * Enhanced Nodrift orchestrator with enterprise architecture.
+ * Nodrift orchestrator.
  */
 export class Nodrift {
   private config: NodriftConfig;

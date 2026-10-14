@@ -29,7 +29,6 @@ program
   .description(
     'Nodrift - Dual-State Contract Verification (Enhanced).\n\n' +
       'Verifies that on-chain contract state matches your YAML configuration.\n' +
-      'With enterprise-grade architecture, plugins, and observability.\n' +
       'Perfect for CI/CD pipelines, audits, and drift detection.'
   )
   .version(VERSION);

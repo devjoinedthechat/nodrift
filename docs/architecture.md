@@ -2,7 +2,7 @@
 
 ## Overview
 
-Nodrift is a blockchain state verification tool designed with enterprise-grade architecture patterns. It follows Domain-Driven Design (DDD) principles and implements several advanced patterns for reliability, scalability, and maintainability.
+Nodrift is a blockchain state verification tool. This document describes its modules and the design patterns it uses.
 
 ## High-Level Architecture
 

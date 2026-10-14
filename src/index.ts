@@ -1,4 +1,4 @@
-/** Nodrift - Dual-State Contract Verification (Enterprise Edition). */
+/** Nodrift - Smart contract state verification for Ethereum. */
 
 export const VERSION = '2.0.0';
 
