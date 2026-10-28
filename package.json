@@ -63,7 +63,7 @@
     "prepare": "npm run build"
   },
   "dependencies": {
-    "@inquirer/prompts": "^8.7.3",
+    "@inquirer/prompts": "^8.7.4",
     "commander": "^15.0.0",
     "ethers": "^6.17.0",
     "js-yaml": "^4.3.2",
